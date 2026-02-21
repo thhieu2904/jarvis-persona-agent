@@ -12,11 +12,11 @@ Constraints:
 
 from typing import Annotated, TypedDict
 from datetime import datetime
+import asyncio
 
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, BaseMessage
 from langgraph.graph import StateGraph, END, START
 from langgraph.graph.message import add_messages
-from langgraph.prebuilt import ToolNode
 
 from app.config import get_settings
 from app.core.llm_provider import create_llm
@@ -25,6 +25,8 @@ from app.features.agent.prompts import SYSTEM_PROMPT
 # Import tools
 from app.features.academic.tools import get_timetable, get_grades, get_semesters
 from app.features.tasks.tools import create_task, list_tasks
+from app.features.notes.tools import save_quick_note, search_notes
+from app.features.calendar.tools import create_event, get_events
 
 
 # ── State Definition ─────────────────────────────────────
@@ -38,7 +40,16 @@ class AgentState(TypedDict):
 
 
 # ── All available tools ──────────────────────────────────
-ALL_TOOLS = [get_timetable, get_grades, get_semesters, create_task, list_tasks]
+ALL_TOOLS = [
+    # Academic (Phase 1)
+    get_timetable, get_grades, get_semesters,
+    # Tasks & Reminders
+    create_task, list_tasks,
+    # Quick Notes (Phase 2)
+    save_quick_note, search_notes,
+    # Calendar Events (Phase 2)
+    create_event, get_events,
+]
 
 
 def build_agent_graph():
@@ -85,18 +96,48 @@ def build_agent_graph():
     # ── Build Graph ──────────────────────────────────────
     graph = StateGraph(AgentState)
 
+    # Custom tool node: injects user_id from state into InjectedToolArg
+    tool_map = {t.name: t for t in ALL_TOOLS}
+
+    async def tool_node(state: AgentState) -> dict:
+        """Execute tools with user_id injected from state."""
+        from langchain_core.messages import ToolMessage
+
+        last_message = state["messages"][-1]
+        user_id = state.get("user_id", "")
+        results = []
+
+        for tc in last_message.tool_calls:
+            tool_fn = tool_map[tc["name"]]
+            args = dict(tc["args"])
+            # Inject user_id for tools that need it
+            args["user_id"] = user_id
+
+            try:
+                if asyncio.iscoroutinefunction(tool_fn.func):
+                    result = await tool_fn.ainvoke(args)
+                else:
+                    result = await tool_fn.ainvoke(args)
+            except Exception as e:
+                result = f"Tool error: {str(e)}"
+
+            results.append(ToolMessage(
+                content=str(result),
+                tool_call_id=tc["id"],
+                name=tc["name"],
+            ))
+
+        return {"messages": results}
+
     graph.add_node("agent", agent_node)
-    graph.add_node("tools", ToolNode(ALL_TOOLS))
+    graph.add_node("tools", tool_node)
 
     graph.add_edge(START, "agent")
     graph.add_conditional_edges("agent", should_continue, {"tools": "tools", END: END})
     graph.add_edge("tools", "agent")  # After tool → back to agent
 
-    # Compile with recursion limit
-    return graph.compile(
-        # checkpointer can be added for persistence
-        recursion_limit=settings.AGENT_RECURSION_LIMIT,
-    )
+    # Compile graph (recursion_limit is now set at invoke time in langgraph 1.x)
+    return graph.compile()
 
 
 # Singleton graph instance

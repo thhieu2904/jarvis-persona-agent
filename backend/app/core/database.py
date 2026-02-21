@@ -12,11 +12,12 @@ from app.config import get_settings
 def get_supabase_client() -> Client:
     """Get the Supabase client (singleton).
     
-    Uses the anon key for standard operations.
-    Uses service_role key for admin operations (bypasses RLS).
+    Uses service_role key by default (no RLS configured yet).
+    Falls back to anon key if service key not set.
     """
     settings = get_settings()
-    return create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+    key = settings.SUPABASE_SERVICE_KEY or settings.SUPABASE_KEY
+    return create_client(settings.SUPABASE_URL, key)
 
 
 @lru_cache

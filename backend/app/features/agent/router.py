@@ -61,13 +61,22 @@ async def chat(
     # 7. Run agent graph
     try:
         graph = get_agent_graph()
-        result = await graph.ainvoke(state)
+        result = await graph.ainvoke(state, config={"recursion_limit": 10})
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
 
     # 8. Extract response
     ai_message = result["messages"][-1]
-    response_text = ai_message.content
+    response_content = ai_message.content
+
+    # Gemini 3 may return content as list of {'type':'text','text':'...'} dicts
+    if isinstance(response_content, list):
+        response_text = "\n".join(
+            part["text"] for part in response_content
+            if isinstance(part, dict) and part.get("type") == "text"
+        )
+    else:
+        response_text = str(response_content)
 
     # 9. Save AI response to DB
     tool_calls = None

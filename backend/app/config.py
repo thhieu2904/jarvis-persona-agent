@@ -38,7 +38,7 @@ class Settings(BaseSettings):
 
     # ── Embedding ────────────────────────────────────────
     EMBEDDING_PROVIDER: str = "gemini"
-    EMBEDDING_MODEL: str = "text-embedding-004"
+    EMBEDDING_MODEL: str = "gemini-embedding-001"
     EMBEDDING_DIMENSIONS: int = 3072
 
     # ── School API ───────────────────────────────────────

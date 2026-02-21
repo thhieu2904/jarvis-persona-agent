@@ -17,6 +17,8 @@ from app.features.auth.router import router as auth_router
 from app.features.academic.router import router as academic_router
 from app.features.agent.router import router as agent_router
 from app.features.tasks.router import router as tasks_router
+from app.features.notes.router import router as notes_router
+from app.features.calendar.router import router as calendar_router
 
 # Phase 3: Uncomment when knowledge feature is ready
 # from app.features.knowledge.router import router as knowledge_router
@@ -58,6 +60,8 @@ def create_app() -> FastAPI:
     app.include_router(academic_router, prefix="/api/academic", tags=["Academic"])
     app.include_router(agent_router, prefix="/api/agent", tags=["Agent"])
     app.include_router(tasks_router, prefix="/api/tasks", tags=["Tasks"])
+    app.include_router(notes_router, prefix="/api/notes", tags=["Notes"])
+    app.include_router(calendar_router, prefix="/api/calendar", tags=["Calendar"])
     # Phase 3:
     # app.include_router(knowledge_router, prefix="/api/knowledge", tags=["Knowledge"])
 
