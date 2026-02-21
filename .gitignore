@@ -1,0 +1,45 @@
+# ── Thư mục cá nhân / nội bộ ─────────────────────────────────────
+plans/
+script/
+SourceThamKhao/
+
+# ── Python ───────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Môi trường ảo ────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Biến môi trường & secrets ────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Output & logs ────────────────────────────────────────────────
+*.log
+*.txt
+!requirements.txt
+test_verify_output.txt
+test_output.txt
+*.jpg
+*.png
+generated_images/
+
+# ── IDE / Editor ─────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
