@@ -34,6 +34,7 @@ async def chat(
     memory = MemoryManager(db, user_id)
 
     # 1. Get or create session
+    is_new_session = data.session_id is None
     session = memory.get_or_create_session(data.session_id)
     session_id = session["id"]
 
@@ -90,6 +91,10 @@ async def chat(
     # 10. Maybe trigger summary (async, non-blocking)
     all_messages = history + [HumanMessage(content=data.message)]
     await memory.maybe_summarize(session_id, all_messages)
+
+    # 11. Auto-generate session title for new sessions
+    if is_new_session:
+        await memory.generate_session_title(session_id, data.message)
 
     return ChatResponse(response=response_text, session_id=session_id)
 

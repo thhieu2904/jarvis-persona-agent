@@ -7,10 +7,12 @@ Feature-based modular architecture:
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import get_settings
+from app.core.exceptions import AppBaseError
 
 # ── Feature Routers ──────────────────────────────────────
 from app.features.auth.router import router as auth_router
@@ -47,13 +49,26 @@ def create_app() -> FastAPI:
     )
 
     # ── CORS ─────────────────────────────────────────────
+    origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://localhost:5173"],
+        allow_origins=origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # ── Global Exception Handler ─────────────────────────
+    @app.exception_handler(AppBaseError)
+    async def app_error_handler(request: Request, exc: AppBaseError):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": exc.message,
+                "detail": exc.detail,
+                "type": type(exc).__name__,
+            },
+        )
 
     # ── Register Feature Routers ─────────────────────────
     app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])

@@ -24,9 +24,9 @@ from app.features.agent.prompts import SYSTEM_PROMPT
 
 # Import tools
 from app.features.academic.tools import get_timetable, get_grades, get_semesters
-from app.features.tasks.tools import create_task, list_tasks
-from app.features.notes.tools import save_quick_note, search_notes
-from app.features.calendar.tools import create_event, get_events
+from app.features.tasks.tools import create_task, list_tasks, update_task, complete_task, delete_task
+from app.features.notes.tools import save_quick_note, search_notes, list_notes, update_note, delete_note
+from app.features.calendar.tools import create_event, get_events, update_event, delete_event
 
 
 # ── State Definition ─────────────────────────────────────
@@ -44,11 +44,11 @@ ALL_TOOLS = [
     # Academic (Phase 1)
     get_timetable, get_grades, get_semesters,
     # Tasks & Reminders
-    create_task, list_tasks,
-    # Quick Notes (Phase 2)
-    save_quick_note, search_notes,
-    # Calendar Events (Phase 2)
-    create_event, get_events,
+    create_task, list_tasks, update_task, complete_task, delete_task,
+    # Quick Notes
+    save_quick_note, search_notes, list_notes, update_note, delete_note,
+    # Calendar Events
+    create_event, get_events, update_event, delete_event,
 ]
 
 

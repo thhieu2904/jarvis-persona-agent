@@ -154,6 +154,53 @@ class MemoryManager:
         )
         return result.data[0]
 
+    async def generate_session_title(self, session_id: str, first_message: str) -> str | None:
+        """Generate a short title for a new conversation session.
+        
+        Uses LLM to create a concise Vietnamese title (max 6 words)
+        from the first user message. Only called for new sessions.
+        
+        Args:
+            session_id: The session to update.
+            first_message: The user's first message.
+            
+        Returns:
+            The generated title, or None on failure.
+        """
+        try:
+            llm = create_llm()
+            prompt = (
+                f"Tạo tiêu đề ngắn gọn (tối đa 6 từ, tiếng Việt) cho cuộc hội thoại "
+                f"bắt đầu bằng tin nhắn sau. CHỈ trả về tiêu đề, không giải thích.\n\n"
+                f"Tin nhắn: \"{first_message[:200]}\""
+            )
+            response = await llm.ainvoke(prompt)
+            title_content = response.content
+            
+            # Handle Gemini structured content format
+            if isinstance(title_content, list):
+                title = "".join(
+                    p["text"] for p in title_content
+                    if isinstance(p, dict) and p.get("type") == "text"
+                ).strip()
+            else:
+                title = str(title_content).strip()
+
+            # Clean up: remove quotes, limit length
+            title = title.strip('"\'').strip()
+            if len(title) > 80:
+                title = title[:80]
+
+            # Save to DB
+            self.db.table("conversation_sessions").update(
+                {"title": title}
+            ).eq("id", session_id).execute()
+
+            return title
+        except Exception:
+            # Non-critical — don't crash if title generation fails
+            return None
+
     def save_message(self, session_id: str, role: str, content: str, tool_calls: dict | None = None):
         """Save a chat message to the database."""
         self.db.table("chat_messages").insert({

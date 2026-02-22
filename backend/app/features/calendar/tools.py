@@ -104,6 +104,7 @@ def get_events(
     result_events = []
     for e in events:
         result_events.append({
+            "id": e["id"],
             "title": e["title"],
             "start_time": e["start_time"],
             "end_time": e.get("end_time"),
@@ -119,5 +120,109 @@ def get_events(
     }, ensure_ascii=False)
 
 
+@tool
+def update_event(
+    event_id: str,
+    title: str | None = None,
+    start_time: str | None = None,
+    end_time: str | None = None,
+    location: str | None = None,
+    description: str | None = None,
+    event_type: str | None = None,
+    user_id: Annotated[str, InjectedToolArg] = "",
+) -> str:
+    """Cập nhật sự kiện/lịch hẹn đã tồn tại.
+    Dùng khi chủ nhân muốn đổi giờ, địa điểm, hoặc tên sự kiện.
+    Trước khi gọi, dùng get_events() để lấy event_id cần sửa.
+
+    Args:
+        event_id: ID của sự kiện cần cập nhật (lấy từ get_events)
+        title: Tên mới (None = giữ nguyên)
+        start_time: Giờ bắt đầu mới, YYYY-MM-DDTHH:MM (None = giữ nguyên)
+        end_time: Giờ kết thúc mới (None = giữ nguyên)
+        location: Địa điểm mới (None = giữ nguyên)
+        description: Mô tả mới (None = giữ nguyên)
+        event_type: Loại sự kiện mới (None = giữ nguyên)
+
+    Returns:
+        Xác nhận đã cập nhật sự kiện.
+    """
+    from app.features.calendar.service import CalendarService
+
+    db = get_db()
+    service = CalendarService(db)
+
+    update_data = {}
+    if title is not None:
+        update_data["title"] = title
+    if start_time is not None:
+        update_data["start_time"] = start_time
+    if end_time is not None:
+        update_data["end_time"] = end_time
+    if location is not None:
+        update_data["location"] = location
+    if description is not None:
+        update_data["description"] = description
+    if event_type is not None:
+        update_data["event_type"] = event_type
+
+    if not update_data:
+        return json.dumps({
+            "status": "error",
+            "message": "Không có thông tin nào để cập nhật.",
+        }, ensure_ascii=False)
+
+    result = service.update_event(user_id=user_id, event_id=event_id, update_data=update_data)
+
+    if not result:
+        return json.dumps({
+            "status": "error",
+            "message": f"Không tìm thấy sự kiện với ID '{event_id}'.",
+        }, ensure_ascii=False)
+
+    return json.dumps({
+        "status": "success",
+        "message": f"Đã cập nhật sự kiện '{result['title']}'.",
+        "updated_fields": list(update_data.keys()),
+    }, ensure_ascii=False)
+
+
+@tool
+def delete_event(
+    event_id: str,
+    user_id: Annotated[str, InjectedToolArg] = "",
+) -> str:
+    """Xóa sự kiện/lịch hẹn.
+    Chỉ xóa khi chủ nhân yêu cầu rõ ràng. Hỏi xác nhận trước khi xóa.
+    Trước khi gọi, dùng get_events() để xác định đúng event_id.
+
+    Args:
+        event_id: ID của sự kiện cần xóa
+
+    Returns:
+        Xác nhận sự kiện đã bị xóa.
+    """
+    from app.features.calendar.service import CalendarService
+
+    db = get_db()
+    service = CalendarService(db)
+
+    # Get event info before deleting
+    event = service.get_event_by_id(user_id=user_id, event_id=event_id)
+    if not event:
+        return json.dumps({
+            "status": "error",
+            "message": f"Không tìm thấy sự kiện với ID '{event_id}'.",
+        }, ensure_ascii=False)
+
+    title = event["title"]
+    service.delete_event(user_id=user_id, event_id=event_id)
+
+    return json.dumps({
+        "status": "success",
+        "message": f"Đã xóa sự kiện '{title}'.",
+    }, ensure_ascii=False)
+
+
 # Export all tools for the agent graph
-calendar_tools = [create_event, get_events]
+calendar_tools = [create_event, get_events, update_event, delete_event]

@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "aic-persona-agent"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"  # comma-separated
 
     # ── Supabase ─────────────────────────────────────────
     SUPABASE_URL: str

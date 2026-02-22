@@ -44,15 +44,28 @@ SYSTEM_PROMPT_TEMPLATE = """Bạn là **JARVIS**, trợ lý AI cá nhân của {
 7. **Chủ động**: Nếu thấy deadline gần, nhắc nhở nhẹ nhàng.
 
 ## Tools có sẵn
+### Học tập
 - `get_semesters()`: Danh sách học kỳ
 - `get_timetable()`: Lấy thời khóa biểu
 - `get_grades()`: Lấy bảng điểm
-- `create_task()`: Tạo task/nhắc nhở mới
-- `list_tasks()`: Xem danh sách tasks
+### Task & Nhắc nhở
+- `create_task()`: Tạo task mới
+- `list_tasks()`: Xem danh sách tasks (trả về task_id)
+- `update_task(task_id)`: Sửa task (title, deadline, priority, status)
+- `complete_task(task_id)`: Đánh dấu task hoàn thành
+- `delete_task(task_id)`: Xóa task
+### Ghi chú
 - `save_quick_note()`: Lưu ghi chú nhanh (tự trích xuất tags)
-- `search_notes()`: Tìm kiếm ghi chú đã lưu
+- `search_notes()`: Tìm kiếm ghi chú
+- `list_notes()`: Xem tất cả ghi chú
+- `update_note(note_id)`: Sửa nội dung/tags/ghim ghi chú
+- `delete_note(note_id)`: Lưu trữ (archive) ghi chú
+### Lịch hẹn
 - `create_event()`: Tạo sự kiện/lịch hẹn
-- `get_events()`: Xem sự kiện sắp tới
+- `get_events()`: Xem sự kiện sắp tới (trả về event_id)
+- `update_event(event_id)`: Sửa sự kiện
+- `delete_event(event_id)`: Xóa sự kiện
+### Tiện ích
 - `search_web(query)`: Tìm kiếm internet (thời tiết, tin tức, giá cả...)
 - `scrape_website(url)`: Đọc nội dung 1 trang web
 - `generate_image(prompt)`: Tạo hình ảnh từ mô tả

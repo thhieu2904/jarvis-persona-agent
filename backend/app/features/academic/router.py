@@ -71,6 +71,48 @@ async def trigger_sync(
     user_id: str = Depends(get_current_user_id),
     db: Client = Depends(get_db),
 ):
-    """Trigger manual sync từ school API."""
-    # TODO: Implement manual sync trigger (invalidate cache)
-    return {"message": f"Sync triggered for {data_type}", "status": "pending"}
+    """Trigger manual sync từ school API.
+    
+    Args:
+        data_type: 'timetable', 'grades', or 'all' (default).
+    """
+    service = AcademicService(db)
+    
+    valid_types = ["timetable", "grades", "all"]
+    if data_type not in valid_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"data_type phải là một trong: {', '.join(valid_types)}",
+        )
+
+    # Invalidate cache
+    if data_type == "all":
+        db.table("academic_sync_cache").delete().eq("user_id", user_id).execute()
+    else:
+        db.table("academic_sync_cache").delete().eq(
+            "user_id", user_id
+        ).eq("data_type", data_type).execute()
+
+    # Re-sync by fetching fresh data (this populates cache)
+    synced = []
+    errors = []
+
+    try:
+        if data_type in ("timetable", "all"):
+            await service.get_timetable(user_id)
+            synced.append("timetable")
+    except Exception as e:
+        errors.append({"type": "timetable", "error": str(e)})
+
+    try:
+        if data_type in ("grades", "all"):
+            await service.get_grades(user_id)
+            synced.append("grades")
+    except Exception as e:
+        errors.append({"type": "grades", "error": str(e)})
+
+    return {
+        "message": f"Sync hoàn tất",
+        "synced": synced,
+        "errors": errors if errors else None,
+    }
