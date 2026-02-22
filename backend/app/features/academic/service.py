@@ -35,14 +35,19 @@ class AcademicService:
         encrypted_pass = encrypt_value(password)
 
         # Upsert: update if exists, insert if not
+        # Fernet tokens are base64 (ASCII-safe), store as UTF-8 strings
+        # IMPORTANT: Do NOT use latin-1 — PostgreSQL text columns will hex-escape non-ASCII
         self.db.table("user_credentials").upsert(
             {
                 "user_id": user_id,
-                "school_username_enc": encrypted_user.decode("latin-1"),
-                "school_password_enc": encrypted_pass.decode("latin-1"),
+                "school_username_enc": encrypted_user.decode("utf-8"),
+                "school_password_enc": encrypted_pass.decode("utf-8"),
             },
             on_conflict="user_id",
         ).execute()
+
+        # IMPORTANT: Invalidate the cache for this user so we fetch fresh data for the new account
+        self.db.table("academic_sync_cache").delete().eq("user_id", user_id).execute()
 
     async def reconnect_credentials(self, user_id: str, mssv: str, password: str):
         """Re-connect: delete old credentials and save new ones.
@@ -81,9 +86,9 @@ class AcademicService:
 
         cred = record.data
 
-        # Decrypt stored credentials
-        mssv = decrypt_value(cred["school_username_enc"].encode("latin-1"))
-        password = decrypt_value(cred["school_password_enc"].encode("latin-1"))
+        # Decrypt stored credentials (Fernet tokens stored as UTF-8 strings)
+        mssv = decrypt_value(cred["school_username_enc"].encode("utf-8"))
+        password = decrypt_value(cred["school_password_enc"].encode("utf-8"))
 
         # Create client and login (sets session cookies internally)
         client = SchoolAPIClient()
@@ -142,21 +147,69 @@ class AcademicService:
 
     # ── Data Access (Cache-first) ────────────────────────
 
-    async def get_timetable(self, user_id: str, semester: str | None = None) -> list[WeekTimetable]:
-        """Get weekly timetable. Cache-first, sync from school API if stale."""
-        # 1. Check cache
-        cached = await self._get_cached(user_id, "timetable", semester)
-        if cached:
+    @staticmethod
+    def _is_valid_response(data: dict) -> bool:
+        """Check if school API response is valid (not an error).
+        
+        School API returns {"code": 500, "result": false, "message": "..."} on error.
+        Valid responses have either no 'code' key or code != 500.
+        """
+        if not isinstance(data, dict):
+            return False
+        # Explicit error from school API
+        if data.get("code") == 500 or data.get("result") is False:
+            return False
+        return True
+
+    async def get_timetable(
+        self,
+        user_id: str,
+        semester: str | None = None,
+        timetable_type: int = 1,
+    ) -> list[WeekTimetable]:
+        """Get weekly timetable. Cache-first, sync from school API if stale.
+
+        Args:
+            user_id: The authenticated user.
+            semester: Semester code, e.g. "20252". None = current semester.
+            timetable_type: 1=cá nhân (default), 2=lớp SV, 3=lớp, 4=môn, 6=khoa.
+        """
+        # Cache key includes timetable_type so different views are cached separately
+        cache_key = semester or "current"
+        if timetable_type != 1:
+            cache_key = f"{cache_key}_type{timetable_type}"
+
+        # 1. Check cache — but skip if cached data is an error response
+        cached = await self._get_cached(user_id, "timetable", cache_key)
+        if cached and self._is_valid_response(cached):
             raw_weeks = cached.get("ds_tuan_tkb", [])
         else:
             # 2. Sync from school (login + fetch + close)
             client = await self._get_authenticated_client(user_id)
             try:
+                # Resolve current semester if not specified
+                actual_semester = semester
+                if not actual_semester or actual_semester == "current":
+                    semesters_data = await client.get_semesters()
+                    if self._is_valid_response(semesters_data):
+                        # Use the exact current semester according to the school server
+                        actual_semester = semesters_data.get("hoc_ky_theo_ngay_hien_tai")
+                
+                # School API requires explicit hoc_ky to be passed in filter
+                semester_id = int(actual_semester) if actual_semester and str(actual_semester).isdigit() else None
+                
                 data = await client.get_weekly_timetable(
-                    int(semester) if semester else None,
+                    semester_id,
+                    timetable_type=timetable_type,
                 )
-                await self._update_cache(user_id, "timetable", data, semester)
-                raw_weeks = data.get("ds_tuan_tkb", [])
+                # Only cache successful responses
+                if self._is_valid_response(data):
+                    await self._update_cache(user_id, "timetable", data, cache_key)
+                    raw_weeks = data.get("ds_tuan_tkb", [])
+                else:
+                    # API returned error — don't cache, return empty
+                    error_msg = data.get("message", "Unknown error")
+                    raise ValueError(f"API trường trả lỗi: {error_msg}")
             finally:
                 await client.close()
 
@@ -166,14 +219,18 @@ class AcademicService:
     async def get_grades(self, user_id: str) -> list[SemesterGrades]:
         """Get all grades. Cache-first, sync from school API if stale."""
         cached = await self._get_cached(user_id, "grades")
-        if cached:
+        if cached and self._is_valid_response(cached):
             raw_semesters = cached.get("ds_diem_hocky", [])
         else:
             client = await self._get_authenticated_client(user_id)
             try:
                 data = await client.get_grades()
-                await self._update_cache(user_id, "grades", data)
-                raw_semesters = data.get("ds_diem_hocky", [])
+                if self._is_valid_response(data):
+                    await self._update_cache(user_id, "grades", data)
+                    raw_semesters = data.get("ds_diem_hocky", [])
+                else:
+                    error_msg = data.get("message", "Unknown error")
+                    raise ValueError(f"API trường trả lỗi: {error_msg}")
             finally:
                 await client.close()
 

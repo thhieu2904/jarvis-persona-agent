@@ -7,11 +7,79 @@ credentials → Login to school API → Fetch → Cache → Return formatted dat
 """
 
 import json
+from datetime import datetime, date, timezone, timedelta
 from typing import Annotated
 from langchain_core.tools import tool, InjectedToolArg
 
 from app.core.dependencies import get_db
 from app.features.academic.service import AcademicService
+from app.features.academic.schemas import WeekTimetable
+
+# Vietnam timezone (UTC+7) — instant, no HTTP call needed
+VN_TZ = timezone(timedelta(hours=7))
+
+
+def _find_current_week_index(weeks: list[WeekTimetable], target: date) -> int:
+    """Return the index of the week containing `target` date.
+    
+    Falls back to the first week with upcoming slots if target is before
+    the semester, or the last week if target is after the semester.
+    
+    Date format in WeekTimetable is DD/MM/YYYY.
+    """
+    for i, w in enumerate(weeks):
+        try:
+            start = datetime.strptime(w.start_date, "%d/%m/%Y").date()
+            end = datetime.strptime(w.end_date, "%d/%m/%Y").date()
+            if start <= target <= end:
+                return i
+        except ValueError:
+            continue
+
+    # Target is outside semester range — find closest future week with slots
+    for i, w in enumerate(weeks):
+        try:
+            start = datetime.strptime(w.start_date, "%d/%m/%Y").date()
+            if start >= target and w.slots:
+                return i
+        except ValueError:
+            continue
+
+    return 0  # Fallback: first week
+
+
+def _format_weeks(weeks: list[WeekTimetable], start_index: int, max_weeks: int = 3) -> str:
+    """Format a window of weeks into a compact string for the LLM.
+    
+    Skips empty weeks (no slots) but still counts them toward max_weeks
+    so we don't scan the entire semester looking for non-empty weeks.
+    """
+    result = ""
+    shown = 0
+    i = start_index
+
+    while i < len(weeks) and shown < max_weeks:
+        w = weeks[i]
+        if not w.slots:
+            # Still count this as part of the window, but note it's empty
+            result += f"Tuần {w.week_number} ({w.start_date} - {w.end_date}): Không có lịch học\n\n"
+        else:
+            day_map = {2: "Thứ 2", 3: "Thứ 3", 4: "Thứ 4", 5: "Thứ 5", 6: "Thứ 6", 7: "Thứ 7", 8: "CN"}
+            result += f"Tuần {w.week_number} ({w.start_date} - {w.end_date}):\n"
+            for s in w.slots:
+                end_period = s.start_period + s.num_periods - 1
+                cancelled = " [NGHỈ]" if s.is_cancelled else ""
+                day_label = day_map.get(s.day_of_week, f"Thứ {s.day_of_week}")
+                result += (
+                    f"  {day_label} | Tiết {s.start_period}-{end_period} | "
+                    f"{s.subject_name} | Phòng {s.room} | "
+                    f"GV: {s.lecturer}{cancelled}\n"
+                )
+            result += "\n"
+        shown += 1
+        i += 1
+
+    return result.strip()
 
 
 @tool
@@ -53,46 +121,55 @@ async def get_semesters(
     except Exception as e:
         return json.dumps({
             "status": "error",
-            "message": f"Lỗi khi lấy danh sách học kỳ: {str(e)}",
+            "message": f"Lỗi khi lấy danh sách học kỳ ({type(e).__name__}): {str(e)}",
         }, ensure_ascii=False)
 
 
 @tool
 async def get_timetable(
     semester_id: int | None = None,
+    target_date: str | None = None,
+    timetable_type: int = 1,
     user_id: Annotated[str, InjectedToolArg] = "",
 ) -> str:
     """Lấy thời khóa biểu (TKB) / lịch học theo tuần.
     Dùng khi sinh viên hỏi về lịch học, thời gian học, phòng học, hoặc giảng viên.
 
+    Trả về window 3 tuần: tuần chứa `target_date` (hoặc tuần hiện tại nếu không truyền)
+    và 2 tuần tiếp theo. Chỉ truyền semester_id khi muốn xem HK khác với HK hiện tại.
+
     Args:
         semester_id: Mã học kỳ (vd: 20252). Nếu None thì lấy HK hiện tại.
+        target_date: Ngày cần xem lịch, định dạng YYYY-MM-DD (vd: "2026-03-10").
+                     Nếu None thì dùng giờ thực của server nhà trường (Vietnam time).
+        timetable_type: Loại TKB. 1=cá nhân (mặc định), 2=lớp sinh viên,
+                        3=lớp, 4=môn học, 6=khoa quản lý sinh viên.
 
     Returns:
-        Thời khóa biểu theo tuần: thứ, tiết, môn, phòng, giảng viên.
+        Thời khóa biểu 3 tuần: thứ, tiết, môn, phòng, giảng viên.
     """
     try:
         service = AcademicService(get_db())
         semester_str = str(semester_id) if semester_id else None
-        weeks = await service.get_timetable(user_id, semester_str)
+        weeks = await service.get_timetable(user_id, semester_str, timetable_type)
 
         if not weeks:
             return "Không có thời khóa biểu cho học kỳ này (có thể HK chưa bắt đầu)."
 
-        result = f"Tổng số tuần: {len(weeks)}\n\n"
-        for w in weeks[:3]:  # Show first 3 weeks
-            result += f"Tuần {w.week_number} ({w.start_date} - {w.end_date}):\n"
-            for s in w.slots:
-                end_period = s.start_period + s.num_periods - 1
-                cancelled = " [NGHỈ]" if s.is_cancelled else ""
-                result += (
-                    f"  Thứ {s.day_of_week} | Tiết {s.start_period}-{end_period} | "
-                    f"{s.subject_name} | Phòng {s.room} | "
-                    f"GV: {s.lecturer}{cancelled}\n"
-                )
-            result += "\n"
+        # Resolve target date — prefer school server time to avoid UTC vs GMT+7 mismatch
+        if target_date:
+            try:
+                pivot = datetime.strptime(target_date, "%Y-%m-%d").date()
+            except ValueError:
+                pivot = datetime.now(VN_TZ).date()
+        else:
+            pivot = datetime.now(VN_TZ).date()
 
-        return result
+        start_index = _find_current_week_index(weeks, pivot)
+        header = f"Ngày tra cứu: {pivot.strftime('%d/%m/%Y')} | Tổng số tuần trong HK: {len(weeks)}\n\n"
+        body = _format_weeks(weeks, start_index, max_weeks=3)
+
+        return header + (body if body else "Không có lịch học trong khoảng thời gian này.")
 
     except ValueError as e:
         return json.dumps({
@@ -103,7 +180,7 @@ async def get_timetable(
     except Exception as e:
         return json.dumps({
             "status": "error",
-            "message": f"Lỗi khi lấy TKB: {str(e)}",
+            "message": f"Lỗi khi lấy TKB ({type(e).__name__}): {str(e)}",
         }, ensure_ascii=False)
 
 
@@ -151,7 +228,7 @@ async def get_grades(
     except Exception as e:
         return json.dumps({
             "status": "error",
-            "message": f"Lỗi khi lấy điểm: {str(e)}",
+            "message": f"Lỗi khi lấy điểm ({type(e).__name__}): {str(e)}",
         }, ensure_ascii=False)
 
 

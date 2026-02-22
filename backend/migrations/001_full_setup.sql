@@ -28,8 +28,8 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS user_credentials (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID UNIQUE REFERENCES users(id) ON DELETE CASCADE,
-    school_username_enc BYTEA NOT NULL,
-    school_password_enc BYTEA NOT NULL,
+    school_username_enc TEXT NOT NULL,  -- Fernet-encrypted, base64 string
+    school_password_enc TEXT NOT NULL,  -- Fernet-encrypted, base64 string
     school_token TEXT,
     token_expires_at TIMESTAMPTZ,
     encryption_key_hint TEXT,

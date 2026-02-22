@@ -6,6 +6,7 @@ Supports: text-to-image, grounded generation (with Google Search).
 import os
 import base64
 from langchain_core.tools import tool
+from app.config import get_settings
 
 
 @tool
@@ -25,10 +26,11 @@ def generate_image(prompt: str) -> str:
         from google import genai
         from google.genai import types
 
-        client = genai.Client(api_key=os.getenv("LLM_API_KEY"))
+        settings = get_settings()
+        client = genai.Client(api_key=settings.LLM_API_KEY)
 
         response = client.models.generate_content(
-            model=os.getenv("IMAGE_MODEL", "gemini-3-pro-image-preview"),
+            model=settings.IMAGE_MODEL,
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_modalities=["TEXT", "IMAGE"],

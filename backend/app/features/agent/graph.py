@@ -5,14 +5,14 @@ Architecture:
   User Message → Agent (LLM) → Tool Decision → Execute Tool → Agent → Response
   
 Constraints:
-  - recursion_limit=5 (max 5 steps per turn)
+  - recursion_limit from AGENT_RECURSION_LIMIT config (default 25)
   - Sliding window memory (last N message pairs)
   - Summary memory for long conversations
 """
 
 from typing import Annotated, TypedDict
-from datetime import datetime
 import asyncio
+import logging
 
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, BaseMessage
 from langgraph.graph import StateGraph, END, START
@@ -20,13 +20,17 @@ from langgraph.graph.message import add_messages
 
 from app.config import get_settings
 from app.core.llm_provider import create_llm
-from app.features.agent.prompts import SYSTEM_PROMPT
+from app.features.agent.prompts import build_system_prompt
+
+logger = logging.getLogger(__name__)
 
 # Import tools
 from app.features.academic.tools import get_timetable, get_grades, get_semesters
 from app.features.tasks.tools import create_task, list_tasks, update_task, complete_task, delete_task
 from app.features.notes.tools import save_quick_note, search_notes, list_notes, update_note, delete_note
 from app.features.calendar.tools import create_event, get_events, update_event, delete_event
+from app.features.agent.tools.web_search import web_tools
+from app.features.agent.tools.image_gen import image_tools
 
 
 # ── State Definition ─────────────────────────────────────
@@ -49,6 +53,9 @@ ALL_TOOLS = [
     save_quick_note, search_notes, list_notes, update_note, delete_note,
     # Calendar Events
     create_event, get_events, update_event, delete_event,
+    # Web Search & Image Gen (Phase 1)
+    *web_tools,
+    *image_tools,
 ]
 
 
@@ -67,11 +74,10 @@ def build_agent_graph():
     # ── Node: Agent (LLM decision) ──────────────────────
     def agent_node(state: AgentState) -> dict:
         """LLM processes messages and decides: respond or call tool."""
-        # Build system prompt with user context
-        system_msg = SystemMessage(content=SYSTEM_PROMPT.format(
+        # Build system prompt with user context + Vietnam time
+        system_msg = SystemMessage(content=build_system_prompt(
             user_name=state.get("user_name", "bạn"),
             user_preferences=state.get("user_preferences", "Chưa có thông tin"),
-            current_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S (%A)"),
         ))
 
         # Prepend summary if exists
@@ -99,6 +105,19 @@ def build_agent_graph():
     # Custom tool node: injects user_id from state into InjectedToolArg
     tool_map = {t.name: t for t in ALL_TOOLS}
 
+    # Detect which tools need user_id (those using InjectedToolArg)
+    import inspect
+    tools_needing_user_id = set()
+    for t in ALL_TOOLS:
+        try:
+            fn = t.func or t.coroutine or getattr(t, '__wrapped__', None)
+            if fn is not None:
+                sig = inspect.signature(fn)
+                if "user_id" in sig.parameters:
+                    tools_needing_user_id.add(t.name)
+        except (ValueError, TypeError):
+            pass  # Skip tools where signature can't be inspected
+
     async def tool_node(state: AgentState) -> dict:
         """Execute tools with user_id injected from state."""
         from langchain_core.messages import ToolMessage
@@ -108,17 +127,28 @@ def build_agent_graph():
         results = []
 
         for tc in last_message.tool_calls:
-            tool_fn = tool_map[tc["name"]]
+            tool_fn = tool_map.get(tc["name"])
+            if tool_fn is None:
+                results.append(ToolMessage(
+                    content=f"Tool '{tc['name']}' không tồn tại. Hãy dùng tool khác.",
+                    tool_call_id=tc["id"],
+                    name=tc["name"],
+                ))
+                continue
             args = dict(tc["args"])
-            # Inject user_id for tools that need it
-            args["user_id"] = user_id
+            # Only inject user_id for tools that need it
+            if tc["name"] in tools_needing_user_id:
+                args["user_id"] = user_id
 
             try:
+                logger.info(f"Calling tool: {tc['name']} with args: {tc['args']}")
                 if asyncio.iscoroutinefunction(tool_fn.func):
                     result = await tool_fn.ainvoke(args)
                 else:
                     result = await tool_fn.ainvoke(args)
+                logger.info(f"Tool {tc['name']} returned ({len(str(result))} chars)")
             except Exception as e:
+                logger.error(f"Tool {tc['name']} error: {e}")
                 result = f"Tool error: {str(e)}"
 
             results.append(ToolMessage(

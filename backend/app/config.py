@@ -45,9 +45,10 @@ class Settings(BaseSettings):
     # ── School API ───────────────────────────────────────
     SCHOOL_API_BASE_URL: str = "https://ttsv.tvu.edu.vn/public/api"
     SCHOOL_CACHE_TTL_HOURS: int = 24  # Cache expiry
+    SCHOOL_API_TIMEOUT: int = 30  # HTTP timeout in seconds
 
     # ── Agent ────────────────────────────────────────────
-    AGENT_RECURSION_LIMIT: int = 10  # Bumped: agent may call multiple tools
+    AGENT_RECURSION_LIMIT: int = 25  # Max graph steps (agent+tool nodes per turn)
     AGENT_MEMORY_WINDOW_SIZE: int = 7
     AGENT_SUMMARY_THRESHOLD: int = 10
 
