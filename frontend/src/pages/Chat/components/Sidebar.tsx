@@ -87,12 +87,16 @@ export default function Sidebar() {
       className={`${styles.sidebar} ${collapsed ? styles.sidebarCollapsed : ""}`}
     >
       <div className={styles.sidebarHeader}>
-        <div className={styles.headerLeft}>
+        <a
+          href="/"
+          className={styles.headerLeft}
+          style={{ textDecoration: "none" }}
+        >
           <div className={styles.sidebarLogo}>
             <Bot size={20} />
           </div>
           <span className={styles.sidebarTitle}>JARVIS</span>
-        </div>
+        </a>
         <button
           className={styles.collapseBtn}
           onClick={() => setCollapsed(!collapsed)}
