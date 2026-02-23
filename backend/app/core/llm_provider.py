@@ -31,6 +31,7 @@ def create_llm() -> BaseChatModel:
                 model=settings.LLM_MODEL,
                 google_api_key=settings.LLM_API_KEY,
                 temperature=settings.LLM_TEMPERATURE,
+                include_thoughts=True,
             )
 
         case "openai":

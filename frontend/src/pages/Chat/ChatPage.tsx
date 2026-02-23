@@ -8,7 +8,7 @@ import {
 } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Bot, Send, Wrench, ImagePlus, X } from "lucide-react";
+import { Bot, Send, Wrench, ImagePlus, X, Lightbulb } from "lucide-react";
 import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
 import Sidebar from "./components/Sidebar";
@@ -192,6 +192,36 @@ export default function ChatPage() {
                           </div>
                         </details>
                       )}
+                    {msg.role === "assistant" && msg.thoughts && (
+                      <details
+                        className={styles.toolResults}
+                        style={{ marginTop: "1rem" }}
+                      >
+                        <summary className={styles.toolResultsSummary}>
+                          <Lightbulb
+                            size={12}
+                            style={{
+                              display: "inline",
+                              verticalAlign: -2,
+                              marginRight: 4,
+                            }}
+                          />
+                          Quá trình suy nghĩ
+                        </summary>
+                        <div className={styles.toolResultsList}>
+                          <div className={styles.toolResultItem}>
+                            <div
+                              className={styles.toolResultData}
+                              style={{ whiteSpace: "pre-wrap", opacity: 0.8 }}
+                            >
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                {msg.thoughts}
+                              </ReactMarkdown>
+                            </div>
+                          </div>
+                        </div>
+                      </details>
+                    )}
                   </div>
                 </div>
               ))}

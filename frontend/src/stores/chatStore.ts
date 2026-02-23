@@ -84,13 +84,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
         images: imageUrls,
       });
 
-      // Add AI response with tool results
+      // Add AI response with tool results and thoughts
       const aiMsg: ChatMessage = {
         id: `ai-${Date.now()}`,
         role: "assistant",
         content: res.response,
         tool_results: res.tool_results || [],
         tools_used: res.tools_used || [],
+        thoughts: res.thoughts || undefined,
         created_at: new Date().toISOString(),
       };
 

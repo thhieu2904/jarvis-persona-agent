@@ -5,6 +5,7 @@ export interface ChatMessage {
   tool_calls?: ToolCall[];
   tool_results?: ToolResult[];
   tools_used?: string[];
+  thoughts?: string;
   created_at: string;
 }
 
@@ -39,4 +40,5 @@ export interface ChatResponse {
   session_id: string;
   tool_results: ToolResult[];
   tools_used?: string[];
+  thoughts?: string;
 }

@@ -39,6 +39,7 @@ class ChatResponse(BaseModel):
     session_id: str
     tool_results: list[ToolResult] = []
     tools_used: list[str] = []
+    thoughts: str | None = None
 
 
 @router.post("/upload_image", response_model=UploadResponse)
@@ -159,12 +160,25 @@ async def chat(
     ai_message = result["messages"][-1]
     response_content = ai_message.content
 
-    # Gemini 3 may return content as list of {'type':'text','text':'...'} dicts
+    # Gemini 3 may return content as list of dicts: {'type':'text','text':'...'} or {'type':'thinking','thinking':'...'}
+    response_text = ""
+    thoughts_text = ""
+    
+    if "thought" in ai_message.additional_kwargs:
+        thoughts_text = ai_message.additional_kwargs["thought"]
+
     if isinstance(response_content, list):
-        response_text = "\n".join(
-            part["text"] for part in response_content
-            if isinstance(part, dict) and part.get("type") == "text"
-        )
+        for part in response_content:
+            if isinstance(part, dict):
+                if part.get("type") == "thinking":
+                    thoughts_text += part.get("thinking", "") + "\n"
+                elif part.get("type") == "text":
+                    response_text += part.get("text", "") + "\n"
+                elif "thought" in part and part["thought"]:
+                    # Legacy fallback
+                    thoughts_text += part.get("text", "") + "\n"
+                else:
+                    response_text += part.get("text", "") + "\n"
     else:
         response_text = str(response_content)
 
@@ -207,10 +221,11 @@ async def chat(
         await memory.generate_session_title(session_id, data.message)
 
     return ChatResponse(
-        response=response_text,
+        response=response_text.strip(),
         session_id=session_id,
         tool_results=tool_results,
         tools_used=list(set(tc["name"] for tc in tool_calls_data)) if tool_calls_data else [],
+        thoughts=thoughts_text.strip() if thoughts_text else None,
     )
 
 
