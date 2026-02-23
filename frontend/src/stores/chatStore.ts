@@ -13,7 +13,7 @@ interface ChatState {
 
   loadSessions: () => Promise<void>;
   setActiveSession: (sessionId: string) => Promise<void>;
-  sendMessage: (message: string) => Promise<void>;
+  sendMessage: (message: string, images?: File[]) => Promise<void>;
   startNewChat: () => void;
   deleteSession: (sessionId: string) => Promise<void>;
   clearError: () => void;
@@ -49,22 +49,39 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  sendMessage: async (message: string) => {
+  sendMessage: async (message: string, images?: File[]) => {
     const { activeSessionId, messages } = get();
 
-    // Optimistic: add user message immediately
+    // Optimistic: add user message immediately (with local preview)
+    const previewContent =
+      images && images.length > 0
+        ? images.map((f) => `![image](${URL.createObjectURL(f)})`).join("\n") +
+          "\n\n" +
+          message
+        : message;
+
     const userMsg: ChatMessage = {
       id: `temp-${Date.now()}`,
       role: "user",
-      content: message,
+      content: previewContent,
       created_at: new Date().toISOString(),
     };
     set({ messages: [...messages, userMsg], isSending: true, error: null });
 
     try {
+      // 1. Upload images first (if any)
+      let imageUrls: string[] | undefined;
+      if (images && images.length > 0) {
+        imageUrls = await Promise.all(
+          images.map((file) => chatService.uploadImage(file)),
+        );
+      }
+
+      // 2. Send chat request with URLs
       const res = await chatService.sendMessage({
         message,
         session_id: activeSessionId || undefined,
+        images: imageUrls,
       });
 
       // Add AI response with tool results
@@ -79,6 +96,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       const newSessionId = res.session_id;
       const currentMessages = get().messages;
+
+      // Replace optimistic user message content with server-saved markdown
+      const serverContent =
+        imageUrls && imageUrls.length > 0
+          ? imageUrls.map((u) => `![image](${u})`).join("\n") + "\n\n" + message
+          : message;
+
+      const updatedMessages = currentMessages.map((m) =>
+        m.id === userMsg.id ? { ...m, content: serverContent } : m,
+      );
 
       // Determine if we need to refresh widgets based on explicit backend flags
       const toolsUsed = res.tools_used || [];
@@ -95,7 +122,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       );
 
       set({
-        messages: [...currentMessages, aiMsg],
+        messages: [...updatedMessages, aiMsg],
         activeSessionId: newSessionId,
         isSending: false,
         ...(shouldRefresh && { needsWidgetRefresh: Date.now() }),

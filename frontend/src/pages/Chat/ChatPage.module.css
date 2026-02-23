@@ -545,10 +545,89 @@
 
 .inputWrapper {
   display: flex;
+  flex-direction: column;
   gap: var(--space-sm);
-  align-items: flex-end;
   max-width: 800px;
   margin: 0 auto;
+}
+
+.inputRow {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: flex-end;
+}
+
+/* ── Image Preview Strip ────────────────────────────── */
+.imagePreviewStrip {
+  display: flex;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  background: var(--bg-input);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+
+.imagePreviewItem {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.imagePreviewThumb {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--glass-border);
+}
+
+.imagePreviewRemove {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 20px;
+  height: 20px;
+  background: var(--red);
+  color: white;
+  border: 2px solid var(--bg-secondary);
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: transform var(--transition-fast);
+}
+
+.imagePreviewRemove:hover {
+  transform: scale(1.15);
+}
+
+/* ── Attach Button ──────────────────────────────────── */
+.attachBtn {
+  width: 48px;
+  height: 48px;
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.attachBtn:hover:not(:disabled) {
+  color: var(--blue-400);
+  border-color: var(--blue-500);
+  background: var(--bg-card);
+}
+
+.attachBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .inputField {
@@ -560,6 +639,7 @@
   color: var(--text-primary);
   font-size: var(--text-base);
   resize: none;
+  overflow-y: hidden;
   min-height: 48px;
   max-height: 200px;
   line-height: 1.5;
@@ -598,6 +678,16 @@
 .sendBtn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* ── Images in user messages ─────────────────────────── */
+.messageBubbleUser img {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: var(--radius-md);
+  margin: var(--space-sm) 0;
+  display: block;
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .errorBanner {

@@ -12,6 +12,19 @@ export const chatService = {
     return res.data;
   },
 
+  async uploadImage(file: File): Promise<string> {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await api.post<{ url: string }>(
+      "/agent/upload_image",
+      formData,
+      {
+        headers: { "Content-Type": "multipart/form-data" },
+      },
+    );
+    return res.data.url;
+  },
+
   async getSessions(): Promise<ChatSession[]> {
     const res = await api.get<{ data: ChatSession[] }>("/agent/sessions");
     return res.data.data;

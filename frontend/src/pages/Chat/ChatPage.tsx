@@ -1,7 +1,14 @@
-import { useState, useRef, useEffect, type KeyboardEvent } from "react";
+import {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  type KeyboardEvent,
+  type ChangeEvent,
+} from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Bot, Send, Wrench } from "lucide-react";
+import { Bot, Send, Wrench, ImagePlus, X } from "lucide-react";
 import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
 import Sidebar from "./components/Sidebar";
@@ -30,8 +37,10 @@ export default function ChatPage() {
     useChatStore();
 
   const [input, setInput] = useState("");
+  const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadSessions();
@@ -44,15 +53,21 @@ export default function ChatPage() {
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
+      const scrollHeight = textareaRef.current.scrollHeight;
+      textareaRef.current.style.height = `${Math.min(scrollHeight + 2, 200)}px`; // +2 for borders
+      textareaRef.current.style.overflowY =
+        scrollHeight >= 200 ? "auto" : "hidden";
     }
   }, [input]);
 
   const handleSend = () => {
     const msg = input.trim();
-    if (!msg || isSending) return;
+    if ((!msg && selectedImages.length === 0) || isSending) return;
+    const imagesToSend =
+      selectedImages.length > 0 ? [...selectedImages] : undefined;
     setInput("");
-    sendMessage(msg);
+    setSelectedImages([]);
+    sendMessage(msg || "Phân tích ảnh này giúp mình", imagesToSend);
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -64,8 +79,20 @@ export default function ChatPage() {
 
   const handleSuggestion = (text: string) => {
     setInput("");
+    setSelectedImages([]);
     sendMessage(text);
   };
+
+  const handleImageSelect = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setSelectedImages((prev) => [...prev, ...files].slice(0, 5)); // Max 5 images
+    e.target.value = ""; // Reset so user can re-select same file
+  }, []);
+
+  const removeImage = useCallback((index: number) => {
+    setSelectedImages((prev) => prev.filter((_, i) => i !== index));
+  }, []);
 
   return (
     <div className={styles.chatLayout}>
@@ -121,13 +148,9 @@ export default function ChatPage() {
                   <div
                     className={`${styles.messageBubble} ${msg.role === "user" ? styles.messageBubbleUser : styles.messageBubbleBot}`}
                   >
-                    {msg.role === "assistant" ? (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {msg.content}
-                      </ReactMarkdown>
-                    ) : (
-                      msg.content
-                    )}
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {msg.content}
+                    </ReactMarkdown>
                     {msg.role === "assistant" &&
                       msg.tool_results &&
                       msg.tool_results.length > 0 && (
@@ -206,24 +229,66 @@ export default function ChatPage() {
             </div>
           )}
           <div className={styles.inputWrapper}>
-            <textarea
-              ref={textareaRef}
-              className={styles.inputField}
-              placeholder="Nhập tin nhắn... (Shift+Enter để xuống dòng)"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              rows={1}
-              disabled={isSending}
-            />
-            <button
-              className={styles.sendBtn}
-              onClick={handleSend}
-              disabled={!input.trim() || isSending}
-              title="Gửi"
-            >
-              <Send size={20} />
-            </button>
+            {/* Image preview strip */}
+            {selectedImages.length > 0 && (
+              <div className={styles.imagePreviewStrip}>
+                {selectedImages.map((file, idx) => (
+                  <div key={idx} className={styles.imagePreviewItem}>
+                    <img
+                      src={URL.createObjectURL(file)}
+                      alt={`preview-${idx}`}
+                      className={styles.imagePreviewThumb}
+                    />
+                    <button
+                      className={styles.imagePreviewRemove}
+                      onClick={() => removeImage(idx)}
+                      title="Xóa ảnh"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className={styles.inputRow}>
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                multiple
+                onChange={handleImageSelect}
+                style={{ display: "none" }}
+              />
+              <button
+                className={styles.attachBtn}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isSending}
+                title="Đính kèm ảnh"
+              >
+                <ImagePlus size={20} />
+              </button>
+              <textarea
+                ref={textareaRef}
+                className={styles.inputField}
+                placeholder="Nhập tin nhắn... (Shift+Enter để xuống dòng)"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                rows={1}
+                disabled={isSending}
+              />
+              <button
+                className={styles.sendBtn}
+                onClick={handleSend}
+                disabled={
+                  (!input.trim() && selectedImages.length === 0) || isSending
+                }
+                title="Gửi"
+              >
+                <Send size={20} />
+              </button>
+            </div>
           </div>
         </div>
       </main>

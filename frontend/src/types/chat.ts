@@ -31,6 +31,7 @@ export interface ChatSession {
 export interface ChatRequest {
   message: string;
   session_id?: string;
+  images?: string[];
 }
 
 export interface ChatResponse {
