@@ -27,6 +27,11 @@ export const authService = {
     return res.data;
   },
 
+  async updateAgentConfig(config: Record<string, unknown>): Promise<User> {
+    const res = await api.put<User>("/auth/profile", { agent_config: config });
+    return res.data;
+  },
+
   async saveSchoolCredentials(mssv: string, password: string) {
     const res = await api.put("/academic/credentials", { mssv, password });
     return res.data;

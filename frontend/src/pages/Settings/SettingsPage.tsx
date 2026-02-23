@@ -1,64 +1,146 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, User, GraduationCap, LogOut } from "lucide-react";
+import {
+  ArrowLeft,
+  GraduationCap,
+  LogOut,
+  FileText,
+  StickyNote,
+  CheckSquare,
+  Settings as SettingsIcon,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { authService } from "../../services/auth.service";
+import { tasksService } from "../../services/tasks.service";
+import { notesService } from "../../services/notes.service";
 import styles from "./SettingsPage.module.css";
 
-type Tab = "profile" | "school";
+function getInitials(name: string): string {
+  if (!name) return "?";
+  return name
+    .split(" ")
+    .map((w) => w[0])
+    .slice(-2)
+    .join("")
+    .toUpperCase();
+}
 
 export default function SettingsPage() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<Tab>("profile");
+  const [stats, setStats] = useState({ docs: 0, notes: 0, tasks: 0 });
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const [notesRes, tasksRes] = await Promise.all([
+          notesService.listNotes(),
+          tasksService.listTasks("pending"), // Shows pending tasks count
+        ]);
+        setStats({ docs: 0, notes: notesRes.length, tasks: tasksRes.length });
+      } catch (err) {
+        console.error("Failed to fetch user stats", err);
+      }
+    };
+    fetchStats();
+  }, []);
 
   const handleLogout = () => {
     logout();
     navigate("/login");
   };
 
+  const joinDate = user?.created_at
+    ? new Date(user.created_at).toLocaleDateString("vi-VN")
+    : "Gần đây";
+
   return (
     <div className={styles.settingsPage}>
-      <aside className={styles.sidebar}>
+      <header className={styles.header}>
         <Link to="/" className={styles.backLink}>
           <ArrowLeft size={16} />
           Quay lại chat
         </Link>
-
-        <nav className={styles.nav}>
-          <button
-            className={`${styles.navItem} ${tab === "profile" ? styles.navItemActive : ""}`}
-            onClick={() => setTab("profile")}
-          >
-            <User size={16} /> Hồ sơ
-          </button>
-          <button
-            className={`${styles.navItem} ${tab === "school" ? styles.navItemActive : ""}`}
-            onClick={() => setTab("school")}
-          >
-            <GraduationCap size={16} /> Tài khoản trường
-          </button>
-        </nav>
-
         <button className={styles.logoutBtn} onClick={handleLogout}>
-          <LogOut
-            size={14}
-            style={{ display: "inline", verticalAlign: -2, marginRight: 6 }}
-          />
+          <LogOut size={14} style={{ display: "inline", verticalAlign: -2 }} />
           Đăng xuất
         </button>
-      </aside>
+      </header>
 
       <div className={styles.content}>
-        {tab === "profile" && <ProfileSection />}
-        {tab === "school" && <SchoolSection />}
+        <h1 className={styles.pageTitle}>Tổng quan tài khoản</h1>
+
+        <div className={styles.dashboardGrid}>
+          {/* ── Left Column: Personal Info ─────────────────────── */}
+          <div>
+            <div className={styles.card}>
+              <div className={styles.avatarSection}>
+                <div className={styles.avatarCircle}>
+                  {user?.avatar_url ? (
+                    <img
+                      src={user.avatar_url}
+                      alt="Avatar"
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        borderRadius: "50%",
+                        objectFit: "cover",
+                      }}
+                    />
+                  ) : (
+                    getInitials(user?.full_name || "?")
+                  )}
+                </div>
+                <div className={styles.userName}>{user?.full_name}</div>
+                <div className={styles.userTenure}>Tham gia từ {joinDate}</div>
+              </div>
+              <ProfileForm />
+            </div>
+          </div>
+
+          {/* ── Right Column ───────────────────────────────────── */}
+          <div>
+            {/* Stat Cards */}
+            <div className={styles.statsRow}>
+              <div className={styles.statCard}>
+                <div className={styles.statLabel}>
+                  <FileText size={14} className={styles.cardIcon} /> Tài liệu
+                  RAG
+                </div>
+                <div className={styles.statValue}>{stats.docs}</div>
+              </div>
+              <div className={styles.statCard}>
+                <div className={styles.statLabel}>
+                  <StickyNote size={14} className={styles.cardIcon} /> Ghi chú
+                  nhanh
+                </div>
+                <div className={styles.statValue}>{stats.notes}</div>
+              </div>
+              <div className={styles.statCard}>
+                <div className={styles.statLabel}>
+                  <CheckSquare size={14} className={styles.cardIcon} /> Nhiệm vụ
+                </div>
+                <div className={styles.statValue}>{stats.tasks}</div>
+              </div>
+            </div>
+
+            {/* School & Sync */}
+            <SchoolForm />
+
+            {/* System Settings */}
+            <SystemConfig />
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-/* ── Profile Section ─────────────────────────────────── */
-function ProfileSection() {
+/* ── Form Components ─────────────────────────────────── */
+
+function ProfileForm() {
   const { user } = useAuthStore();
   const [name, setName] = useState(user?.full_name || "");
   const [saving, setSaving] = useState(false);
@@ -73,7 +155,6 @@ function ProfileSection() {
     try {
       await authService.updateProfile({ full_name: name } as any);
       setSuccess("Cập nhật thành công!");
-      // Update local storage
       const stored = localStorage.getItem("user");
       if (stored) {
         const u = JSON.parse(stored);
@@ -88,44 +169,43 @@ function ProfileSection() {
   };
 
   return (
-    <div className={styles.section}>
-      <h2 className={styles.sectionTitle}>Hồ sơ cá nhân</h2>
-
+    <form onSubmit={handleSave}>
       {success && <div className={styles.success}>{success}</div>}
       {error && <div className={styles.error}>{error}</div>}
-
-      <form className={styles.card} onSubmit={handleSave}>
-        <div className={styles.field}>
-          <label>Họ và tên</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} />
-        </div>
-        <div className={styles.field}>
-          <label>Email</label>
-          <input value={user?.email || ""} disabled style={{ opacity: 0.5 }} />
-        </div>
-        <div className={styles.field}>
-          <label>MSSV</label>
-          <input
-            value={user?.student_id || ""}
-            disabled
-            style={{ opacity: 0.5 }}
-          />
-        </div>
-        <button type="submit" className={styles.saveBtn} disabled={saving}>
-          {saving ? "Đang lưu..." : "Lưu thay đổi"}
-        </button>
-      </form>
-    </div>
+      <div className={styles.field}>
+        <label>Họ và tên</label>
+        <input value={name} onChange={(e) => setName(e.target.value)} />
+      </div>
+      <div className={styles.field}>
+        <label>Email</label>
+        <input value={user?.email || ""} disabled />
+      </div>
+      <div className={styles.field}>
+        <label>MSSV</label>
+        <input value={user?.student_id || ""} disabled />
+      </div>
+      <button
+        type="submit"
+        className={styles.saveBtn}
+        disabled={saving}
+        style={{ width: "100%" }}
+      >
+        {saving ? "Đang lưu..." : "Lưu thay đổi"}
+      </button>
+    </form>
   );
 }
 
-/* ── School Credentials Section ──────────────────────── */
-function SchoolSection() {
+function SchoolForm() {
   const [mssv, setMssv] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
+
+  // Placeholder sync status
+  const isSyncSuccess = true;
 
   const handleSave = async (e: FormEvent) => {
     e.preventDefault();
@@ -136,32 +216,54 @@ function SchoolSection() {
     try {
       const res = await authService.saveSchoolCredentials(mssv, password);
       setSuccess(res.message || "Kết nối thành công!");
-      setPassword(""); // Clear password after save
+      setPassword("");
     } catch (err: any) {
-      setError(err.response?.data?.detail || "Kết nối thất bại");
+      const detail = err.response?.data?.detail;
+      if (typeof detail === "string") {
+        setError(detail);
+      } else {
+        setError("Kết nối thất bại. Vui lòng thử lại.");
+      }
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className={styles.section}>
-      <h2 className={styles.sectionTitle}>Tài khoản trường</h2>
+    <div className={styles.card}>
+      <h2 className={styles.cardTitle}>
+        <GraduationCap size={18} className={styles.cardIcon} />
+        Tài khoản trường
+        <span className={styles.syncStatus}>
+          <span
+            className={`${styles.syncDot} ${isSyncSuccess ? styles.syncSuccess : styles.syncError}`}
+          />
+          {isSyncSuccess ? "Đã đồng bộ" : "Lỗi đồng bộ"}
+        </span>
+      </h2>
       <p
         style={{
           color: "var(--text-muted)",
-          marginBottom: "var(--space-lg)",
+          marginBottom: "var(--space-md)",
           fontSize: "var(--text-sm)",
         }}
       >
         Kết nối tài khoản đào tạo để JARVIS có thể tra cứu TKB, điểm số, và lịch
-        thi cho bạn. Thông tin được mã hóa an toàn.
+        thi cho bạn.
       </p>
 
       {success && <div className={styles.success}>✅ {success}</div>}
       {error && <div className={styles.error}>{error}</div>}
 
-      <form className={styles.card} onSubmit={handleSave}>
+      <form
+        onSubmit={handleSave}
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: "16px",
+          alignItems: "end",
+        }}
+      >
         <div className={styles.field}>
           <label>MSSV</label>
           <input
@@ -174,21 +276,125 @@ function SchoolSection() {
         <div className={styles.field}>
           <label>Mật khẩu đào tạo</label>
           <input
-            type="password"
+            type={showPassword ? "text" : "password"}
             placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            style={{ paddingRight: "40px" }}
           />
+          <button
+            type="button"
+            className={styles.passwordToggle}
+            onClick={() => setShowPassword(!showPassword)}
+            title={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+          >
+            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
         </div>
-        <button
-          type="submit"
-          className={styles.saveBtn}
-          disabled={saving || !mssv || !password}
+        <div
+          style={{
+            gridColumn: "1 / -1",
+            display: "flex",
+            gap: "12px",
+            marginTop: "8px",
+          }}
         >
-          {saving ? "Đang kết nối..." : "Kết nối tài khoản"}
-        </button>
+          <button
+            type="submit"
+            className={styles.saveBtn}
+            disabled={saving || !mssv || !password}
+            style={{ margin: 0 }}
+          >
+            {saving ? "Đang kiểm tra & kết nối..." : "Kết nối & Đồng bộ ngay"}
+          </button>
+        </div>
       </form>
+    </div>
+  );
+}
+
+function SystemConfig() {
+  const { user, updateAgentConfig } = useAuthStore();
+  const [updating, setUpdating] = useState(false);
+
+  const currentVerbosity =
+    (user?.agent_config?.response_detail as string) || "Đầy đủ (Chi tiết)";
+
+  const handleVerbosityChange = async (
+    e: React.ChangeEvent<HTMLSelectElement>,
+  ) => {
+    const newVal = e.target.value;
+    setUpdating(true);
+    try {
+      await updateAgentConfig({
+        ...(user?.agent_config || {}),
+        response_detail: newVal,
+      });
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  return (
+    <div className={styles.card}>
+      <h2 className={styles.cardTitle}>
+        <SettingsIcon size={18} className={styles.cardIcon} /> Hệ thống & Trợ lý
+        cá nhân
+      </h2>
+
+      <div className={styles.toggleRow}>
+        <div>
+          <div className={styles.toggleLabel}>Giao diện Tối / Sáng</div>
+          <div className={styles.toggleDesc}>
+            JARVIS hiện đang mặc định theo Tech Light Mode.
+          </div>
+        </div>
+        <div style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)" }}>
+          Light (Mặc định)
+        </div>
+      </div>
+
+      <div className={styles.toggleRow}>
+        <div>
+          <div className={styles.toggleLabel}>Ngôn ngữ phản hồi mặc định</div>
+          <div className={styles.toggleDesc}>
+            Ngôn ngữ JARVIS ưu tiên khi trả lời.
+          </div>
+        </div>
+        <select
+          className={styles.field}
+          style={{ width: "auto", margin: 0, padding: "6px 12px" }}
+          disabled
+        >
+          <option>Tiếng Việt</option>
+        </select>
+      </div>
+
+      <div className={styles.toggleRow}>
+        <div>
+          <div className={styles.toggleLabel}>Độ chi tiết câu trả lời</div>
+          <div className={styles.toggleDesc}>
+            Chỉnh mức độ dài/ngắn của AI Agent.
+          </div>
+        </div>
+        <select
+          className={styles.field}
+          style={{
+            width: "auto",
+            margin: 0,
+            padding: "6px 12px",
+            opacity: updating ? 0.5 : 1,
+            cursor: updating ? "wait" : "pointer",
+          }}
+          value={currentVerbosity}
+          onChange={handleVerbosityChange}
+          disabled={updating}
+        >
+          <option value="Đầy đủ (Chi tiết)">Đầy đủ (Chi tiết)</option>
+          <option value="Ngắn gọn (Tóm tắt)">Ngắn gọn (Tóm tắt)</option>
+        </select>
+      </div>
     </div>
   );
 }

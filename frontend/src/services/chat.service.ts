@@ -23,4 +23,11 @@ export const chatService = {
     );
     return res.data.data;
   },
+
+  async deleteSession(sessionId: string): Promise<{ message: string }> {
+    const res = await api.delete<{ message: string }>(
+      `/agent/sessions/${sessionId}`,
+    );
+    return res.data;
+  },
 };

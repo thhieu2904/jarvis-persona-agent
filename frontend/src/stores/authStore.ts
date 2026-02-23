@@ -15,6 +15,7 @@ interface AuthState {
     password: string,
     studentId?: string,
   ) => Promise<void>;
+  updateAgentConfig: (config: Record<string, unknown>) => Promise<void>;
   logout: () => void;
   loadFromStorage: () => void;
   clearError: () => void;
@@ -56,6 +57,17 @@ export const useAuthStore = create<AuthState>((set) => ({
       const msg = err.response?.data?.detail || "Đăng ký thất bại";
       set({ error: msg, isLoading: false });
       throw err;
+    }
+  },
+
+  updateAgentConfig: async (config) => {
+    try {
+      const updatedUser = await authService.updateAgentConfig(config);
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+      set({ user: updatedUser });
+    } catch (err: any) {
+      console.error("Failed to update agent config:", err);
+      // Optional: set error state if you want UI feedback
     }
   },
 

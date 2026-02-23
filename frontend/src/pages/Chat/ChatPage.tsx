@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, type KeyboardEvent } from "react";
-import { Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Bot, Send, Plus, Settings, MessageSquare, Wrench } from "lucide-react";
+import { Bot, Send, Wrench } from "lucide-react";
 import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
+import Sidebar from "./components/Sidebar";
+import FeaturePanel from "./components/FeaturePanel";
 import styles from "./ChatPage.module.css";
 
 function getInitials(name: string): string {
@@ -16,36 +17,6 @@ function getInitials(name: string): string {
     .toUpperCase();
 }
 
-function groupSessionsByDate(
-  sessions: typeof useChatStore.prototype extends never
-    ? never
-    : ReturnType<typeof useChatStore.getState>["sessions"],
-) {
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  const groups: { label: string; items: typeof sessions }[] = [];
-  const todayItems: typeof sessions = [];
-  const yesterdayItems: typeof sessions = [];
-  const olderItems: typeof sessions = [];
-
-  for (const s of sessions) {
-    const d = new Date(s.updated_at || s.created_at);
-    if (d.toDateString() === today.toDateString()) todayItems.push(s);
-    else if (d.toDateString() === yesterday.toDateString())
-      yesterdayItems.push(s);
-    else olderItems.push(s);
-  }
-
-  if (todayItems.length) groups.push({ label: "Hôm nay", items: todayItems });
-  if (yesterdayItems.length)
-    groups.push({ label: "Hôm qua", items: yesterdayItems });
-  if (olderItems.length) groups.push({ label: "Trước đó", items: olderItems });
-
-  return groups;
-}
-
 const SUGGESTIONS = [
   "Tuần này mình học gì?",
   "Cho xem điểm học kỳ",
@@ -55,34 +26,21 @@ const SUGGESTIONS = [
 
 export default function ChatPage() {
   const { user } = useAuthStore();
-  const {
-    sessions,
-    activeSessionId,
-    messages,
-    isSending,
-    error,
-    loadSessions,
-    setActiveSession,
-    sendMessage,
-    startNewChat,
-    clearError,
-  } = useChatStore();
+  const { messages, isSending, error, loadSessions, sendMessage, clearError } =
+    useChatStore();
 
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load sessions on mount
   useEffect(() => {
     loadSessions();
   }, [loadSessions]);
 
-  // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isSending]);
 
-  // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -109,72 +67,9 @@ export default function ChatPage() {
     sendMessage(text);
   };
 
-  const sessionGroups = groupSessionsByDate(sessions);
-
   return (
     <div className={styles.chatLayout}>
-      {/* ── Sidebar ──────────────────────────────────── */}
-      <aside className={styles.sidebar}>
-        <div className={styles.sidebarHeader}>
-          <div className={styles.sidebarLogo}>
-            <Bot size={20} />
-          </div>
-          <span className={styles.sidebarTitle}>JARVIS</span>
-        </div>
-
-        <button className={styles.newChatBtn} onClick={startNewChat}>
-          <Plus size={16} />
-          Cuộc trò chuyện mới
-        </button>
-
-        <div className={styles.sessionList}>
-          {sessionGroups.map((group) => (
-            <div key={group.label} className={styles.sessionGroup}>
-              <div className={styles.sessionGroupLabel}>{group.label}</div>
-              {group.items.map((s) => (
-                <button
-                  key={s.id}
-                  className={`${styles.sessionItem} ${s.id === activeSessionId ? styles.sessionItemActive : ""}`}
-                  onClick={() => setActiveSession(s.id)}
-                  title={s.title || "Chat"}
-                >
-                  <MessageSquare
-                    size={14}
-                    style={{
-                      display: "inline",
-                      marginRight: 6,
-                      verticalAlign: -2,
-                    }}
-                  />
-                  {s.title || "Cuộc trò chuyện"}
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
-
-        <div className={styles.sidebarFooter}>
-          <Link to="/settings" className={styles.userInfo}>
-            <div className={styles.userAvatar}>
-              {user ? getInitials(user.full_name) : "?"}
-            </div>
-            <div>
-              <div className={styles.userName}>{user?.full_name}</div>
-              <div className={styles.userEmail}>
-                <Settings
-                  size={12}
-                  style={{
-                    display: "inline",
-                    verticalAlign: -1,
-                    marginRight: 4,
-                  }}
-                />
-                Cài đặt
-              </div>
-            </div>
-          </Link>
-        </div>
-      </aside>
+      <Sidebar />
 
       {/* ── Main ─────────────────────────────────────── */}
       <main className={styles.chatMain}>
@@ -233,7 +128,6 @@ export default function ChatPage() {
                     ) : (
                       msg.content
                     )}
-                    {/* Tool Results - collapsible */}
                     {msg.role === "assistant" &&
                       msg.tool_results &&
                       msg.tool_results.length > 0 && (
@@ -333,6 +227,8 @@ export default function ChatPage() {
           </div>
         </div>
       </main>
+
+      <FeaturePanel />
     </div>
   );
 }

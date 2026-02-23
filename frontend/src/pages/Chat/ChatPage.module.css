@@ -3,12 +3,24 @@
    ═══════════════════════════════════════════════════════ */
 
 .chatLayout {
-  display: flex;
+  display: flex; /* Or grid if we prefer, but flex is fine if we use widths for sidebar and feature panel */
   height: 100vh;
   overflow: hidden;
+  background: var(--bg-primary);
 }
 
-/* ── Sidebar ─────────────────────────────────────────── */
+/* ── Feature Panel ───────────────────────────────────────── */
+.featurePanel {
+  width: 320px;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--glass-border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow-y: auto;
+  transition: transform var(--transition-base);
+}
+
 .sidebar {
   width: var(--sidebar-width);
   background: var(--bg-secondary);
@@ -16,12 +28,55 @@
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  transition: transform var(--transition-base);
+  transition:
+    width var(--transition-base),
+    transform var(--transition-base);
+}
+
+.sidebarCollapsed {
+  width: 72px; /* narrow width for collapsed state */
+}
+
+/* Hide text elements when collapsed */
+.sidebarCollapsed .sidebarTitle,
+.sidebarCollapsed .newChatBtn span,
+.sidebarCollapsed .sessionGroupLabel,
+.sidebarCollapsed .sessionItem span,
+.sidebarCollapsed .userName,
+.sidebarCollapsed .userEmail {
+  display: none;
+}
+
+/* Adjust layout when collapsed */
+.sidebarCollapsed .newChatBtn {
+  padding: 10px;
+}
+
+.sidebarCollapsed .sessionItem {
+  text-align: center;
+  padding: var(--space-sm);
+  display: flex;
+  justify-content: center;
+}
+
+.sidebarCollapsed .sessionItem svg {
+  margin: 0 !important;
+}
+
+.sidebarCollapsed .userInfo {
+  justify-content: center;
 }
 
 .sidebarHeader {
   padding: var(--space-md) var(--space-lg);
   border-bottom: 1px solid var(--glass-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* Space for collapse button */
+  gap: var(--space-sm);
+}
+
+.headerLeft {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
@@ -44,6 +99,32 @@
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: -0.3px;
+}
+
+.collapseBtn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.collapseBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.sidebarCollapsed .collapseBtn {
+  margin: 0 auto;
+}
+
+.sidebarCollapsed .headerLeft {
+  display: none; /* Hide logo/title when collapsed to center the button */
 }
 
 .newChatBtn {
@@ -88,7 +169,9 @@
 }
 
 .sessionItem {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   width: 100%;
   text-align: left;
   padding: var(--space-sm) var(--space-md);
@@ -97,10 +180,21 @@
   color: var(--text-secondary);
   font-size: var(--text-sm);
   transition: all var(--transition-fast);
+  margin-bottom: 2px;
+  position: relative;
+}
+
+.sessionLabel {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0; /* for truncation */
+}
+
+.sessionLabel span {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-bottom: 2px;
 }
 
 .sessionItem:hover {
@@ -112,6 +206,43 @@
   background: var(--bg-card);
   color: var(--blue-400);
   font-weight: 500;
+}
+
+/* Delete Button */
+.sessionDeleteBtn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.sessionItem:hover .sessionDeleteBtn {
+  opacity: 1;
+}
+
+.sessionDeleteBtn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--red);
+}
+
+/* Disabled state */
+.sessionDeleteBtn:disabled {
+  opacity: 1;
+  cursor: not-allowed;
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.sidebarCollapsed .sessionDeleteBtn {
+  display: none; /* Hide delete when collapsed */
 }
 
 /* ── Sidebar Footer ──────────────────────────────────── */
@@ -564,4 +695,244 @@
   overflow-y: auto;
   margin: 0;
   line-height: 1.5;
+}
+
+/* ── Feature Panel Content ──────────────────────────────── */
+.featurePanelContent {
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.widget {
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  overflow: hidden;
+}
+
+/* Calendar Widget */
+.widgetHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-md);
+}
+
+.calendarNav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.calendarNavBtn {
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.calendarNavBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.calendarGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  text-align: center;
+}
+
+.calendarDayName {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: var(--space-xs);
+}
+
+.calendarDate {
+  font-size: var(--text-xs);
+  padding: 6px 0;
+  border-radius: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.calendarDateMuted {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.calendarDate:hover {
+  background: var(--bg-hover);
+}
+
+.calendarDateActive {
+  background: var(--blue-500);
+  color: white !important;
+  font-weight: 600;
+  opacity: 1;
+}
+
+.calendarTaskDot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: var(--red); /* Or dynamically set based on task type */
+  margin-bottom: -6px; /* slightly adjust so it doesn't increase cell height too much */
+}
+
+/* Notes List Widget */
+.notesList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.noteItem {
+  padding: var(--space-sm);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  border: 1px solid var(--glass-border);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.noteItem:hover {
+  border-color: var(--blue-400);
+  transform: translateY(-1px);
+}
+
+.noteText {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  margin: 0 0 4px 0;
+  line-height: 1.4;
+}
+
+.noteTime {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* ── Modal Dialog ──────────────────────────────────────── */
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(2px);
+  animation: fadeIn 0.15s ease-out;
+}
+
+.modalContent {
+  background: var(--bg-primary);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-xl);
+  border-radius: var(--radius-lg);
+  width: 90%;
+  max-width: 400px;
+  padding: var(--space-xl);
+  animation: slideUp 0.15s ease-out;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: var(--text-lg);
+}
+
+.modalBody {
+  color: var(--text-secondary);
+  font-size: var(--text-md);
+  line-height: 1.5;
+  margin-bottom: var(--space-xl);
+}
+
+.modalFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+.btnCancel {
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-weight: 500;
+}
+
+.btnCancel:hover {
+  background: var(--bg-hover);
+}
+
+.btnDanger {
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--red);
+  color: white;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btnDanger:hover {
+  opacity: 0.9;
+}
+
+.btnDanger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }

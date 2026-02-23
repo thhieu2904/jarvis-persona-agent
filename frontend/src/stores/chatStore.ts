@@ -9,11 +9,13 @@ interface ChatState {
   isLoading: boolean;
   isSending: boolean;
   error: string | null;
+  needsWidgetRefresh: number;
 
   loadSessions: () => Promise<void>;
   setActiveSession: (sessionId: string) => Promise<void>;
   sendMessage: (message: string) => Promise<void>;
   startNewChat: () => void;
+  deleteSession: (sessionId: string) => Promise<void>;
   clearError: () => void;
 }
 
@@ -24,6 +26,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isLoading: false,
   isSending: false,
   error: null,
+  needsWidgetRefresh: 0,
 
   loadSessions: async () => {
     set({ isLoading: true });
@@ -70,16 +73,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
         role: "assistant",
         content: res.response,
         tool_results: res.tool_results || [],
+        tools_used: res.tools_used || [],
         created_at: new Date().toISOString(),
       };
 
       const newSessionId = res.session_id;
       const currentMessages = get().messages;
 
+      // Determine if we need to refresh widgets based on explicit backend flags
+      const toolsUsed = res.tools_used || [];
+      const relatedTools = [
+        "create_task",
+        "update_task",
+        "delete_task",
+        "create_note",
+        "update_note",
+        "delete_note",
+      ];
+      const shouldRefresh = toolsUsed.some((tool) =>
+        relatedTools.includes(tool),
+      );
+
       set({
         messages: [...currentMessages, aiMsg],
         activeSessionId: newSessionId,
         isSending: false,
+        ...(shouldRefresh && { needsWidgetRefresh: Date.now() }),
       });
 
       // Refresh sessions list (new session might have been created)
@@ -92,6 +111,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   startNewChat: () => {
     set({ activeSessionId: null, messages: [] });
+  },
+
+  deleteSession: async (sessionId: string) => {
+    try {
+      await chatService.deleteSession(sessionId);
+
+      const { sessions, activeSessionId } = get();
+      const updatedSessions = sessions.filter((s) => s.id !== sessionId);
+
+      set({
+        sessions: updatedSessions,
+        ...(activeSessionId === sessionId
+          ? { activeSessionId: null, messages: [] }
+          : {}),
+      });
+    } catch (err: any) {
+      set({
+        error: err.response?.data?.detail || "Không thể xóa cuộc trò chuyện",
+      });
+    }
   },
 
   clearError: () => set({ error: null }),
