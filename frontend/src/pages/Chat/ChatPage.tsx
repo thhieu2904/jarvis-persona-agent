@@ -33,10 +33,11 @@ function getInitials(name: string): string {
 }
 
 const SUGGESTIONS = [
-  "Tuần này mình học gì?",
-  "Cho xem điểm học kỳ",
-  "Tạo task nộp bài OOP",
-  "Ghi note nhanh",
+  "Tạo ảnh minh họa cho khái niệm OOP", // Image Gen tool
+  "Tìm tin tức công nghệ mới nhất hôm nay", // Web Search tool
+  // "Giải thích chi tiết về tính đa hình", // RAG / Academic tool
+  "Tóm tắt lịch học tuần này của mình", // Schedule / User Data
+  "Phân tích hệ thống qua ảnh upload", // Vision
 ];
 
 export default function ChatPage() {
