@@ -10,10 +10,12 @@ interface ChatState {
   isSending: boolean;
   error: string | null;
   needsWidgetRefresh: number;
+  abortController: AbortController | null;
 
   loadSessions: () => Promise<void>;
   setActiveSession: (sessionId: string) => Promise<void>;
   sendMessage: (message: string, images?: File[]) => Promise<void>;
+  stopStreaming: () => void;
   startNewChat: () => void;
   deleteSession: (sessionId: string) => Promise<void>;
   clearError: () => void;
@@ -27,6 +29,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isSending: false,
   error: null,
   needsWidgetRefresh: 0,
+  abortController: null,
 
   loadSessions: async () => {
     set({ isLoading: true });
@@ -49,6 +52,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  stopStreaming: () => {
+    const { abortController } = get();
+    if (abortController) {
+      abortController.abort();
+      set({ abortController: null, isSending: false });
+    }
+  },
+
   sendMessage: async (message: string, images?: File[]) => {
     const { activeSessionId, messages } = get();
 
@@ -66,7 +77,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
       content: previewContent,
       created_at: new Date().toISOString(),
     };
-    set({ messages: [...messages, userMsg], isSending: true, error: null });
+
+    // Create empty AI message container for streaming
+    const aiMsgId = `ai-${Date.now()}`;
+    const initialAiMsg: ChatMessage = {
+      id: aiMsgId,
+      role: "assistant",
+      content: "",
+      tool_results: [],
+      tools_used: [],
+      thoughts: "",
+      created_at: new Date().toISOString(),
+    };
+
+    set({
+      messages: [...messages, userMsg, initialAiMsg],
+      isSending: true,
+      error: null,
+    });
+
+    const controller = new AbortController();
+    set({ abortController: controller });
 
     try {
       // 1. Upload images first (if any)
@@ -77,39 +108,75 @@ export const useChatStore = create<ChatState>((set, get) => ({
         );
       }
 
-      // 2. Send chat request with URLs
-      const res = await chatService.sendMessage({
-        message,
-        session_id: activeSessionId || undefined,
-        images: imageUrls,
-      });
+      // 2. Send stream request with URLs
+      await chatService.streamMessage(
+        {
+          message,
+          session_id: activeSessionId || undefined,
+          images: imageUrls,
+        },
+        controller.signal,
+        (eventRaw) => {
+          try {
+            const data = JSON.parse(eventRaw);
+            const currentMessages = get().messages;
+            const msgIndex = currentMessages.findIndex((m) => m.id === aiMsgId);
+            if (msgIndex === -1) return;
 
-      // Add AI response with tool results and thoughts
-      const aiMsg: ChatMessage = {
-        id: `ai-${Date.now()}`,
-        role: "assistant",
-        content: res.response,
-        tool_results: res.tool_results || [],
-        tools_used: res.tools_used || [],
-        thoughts: res.thoughts || undefined,
-        created_at: new Date().toISOString(),
-      };
+            const updatedAiMsg = { ...currentMessages[msgIndex] };
 
-      const newSessionId = res.session_id;
-      const currentMessages = get().messages;
+            if (data.type === "thinking") {
+              updatedAiMsg.thoughts =
+                (updatedAiMsg.thoughts || "") + data.content;
+            } else if (data.type === "message") {
+              updatedAiMsg.content =
+                (updatedAiMsg.content || "") + data.content;
+            } else if (data.type === "tool_call") {
+              if (data.status === "end") {
+                updatedAiMsg.tool_results = [
+                  ...(updatedAiMsg.tool_results || []),
+                  {
+                    tool_name: data.name,
+                    tool_args: {},
+                    result: data.result || "",
+                  },
+                ];
+                if (!updatedAiMsg.tools_used?.includes(data.name)) {
+                  updatedAiMsg.tools_used = [
+                    ...(updatedAiMsg.tools_used || []),
+                    data.name,
+                  ];
+                }
+              }
+            } else if (data.type === "done") {
+              set({ activeSessionId: data.session_id });
+            } else if (data.type === "error") {
+              updatedAiMsg.content =
+                (updatedAiMsg.content || "") + data.content;
+            }
 
-      // Replace optimistic user message content with server-saved markdown
+            const newMessages = [...currentMessages];
+            newMessages[msgIndex] = updatedAiMsg;
+            set({ messages: newMessages });
+          } catch (e) {
+            console.error("Stream parse error:", e);
+          }
+        },
+      );
+
       const serverContent =
         imageUrls && imageUrls.length > 0
           ? imageUrls.map((u) => `![image](${u})`).join("\n") + "\n\n" + message
           : message;
 
-      const updatedMessages = currentMessages.map((m) =>
+      const currentMessagesFinal = get().messages;
+      const updatedMessages = currentMessagesFinal.map((m) =>
         m.id === userMsg.id ? { ...m, content: serverContent } : m,
       );
 
-      // Determine if we need to refresh widgets based on explicit backend flags
-      const toolsUsed = res.tools_used || [];
+      // Determine if widget refresh needed based on tools uses
+      const aiFinalMsg = updatedMessages.find((m) => m.id === aiMsgId);
+      const toolsUsed = aiFinalMsg?.tools_used || [];
       const relatedTools = [
         "create_task",
         "update_task",
@@ -123,17 +190,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
       );
 
       set({
-        messages: [...updatedMessages, aiMsg],
-        activeSessionId: newSessionId,
+        messages: updatedMessages,
         isSending: false,
+        abortController: null,
         ...(shouldRefresh && { needsWidgetRefresh: Date.now() }),
       });
 
-      // Refresh sessions list (new session might have been created)
+      // Refresh sessions list
       get().loadSessions();
     } catch (err: any) {
-      const msg = err.response?.data?.detail || "Gửi tin nhắn thất bại";
-      set({ isSending: false, error: msg });
+      if (err.name === "AbortError") {
+        const currentMessages = get().messages;
+        const msgIndex = currentMessages.findIndex((m) => m.id === aiMsgId);
+        if (msgIndex !== -1) {
+          const newMsgs = [...currentMessages];
+          newMsgs[msgIndex] = {
+            ...newMsgs[msgIndex],
+            content: newMsgs[msgIndex].content + "\n\n*[Đã dừng tạo]*",
+          };
+          set({ messages: newMsgs });
+        }
+      } else {
+        const msg =
+          err.response?.data?.detail || err.message || "Gửi tin nhắn thất bại";
+        set({ error: msg });
+      }
+      set({ isSending: false, abortController: null });
     }
   },
 

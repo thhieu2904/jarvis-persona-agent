@@ -8,7 +8,15 @@ import {
 } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Bot, Send, Wrench, ImagePlus, X, Lightbulb } from "lucide-react";
+import {
+  Bot,
+  Send,
+  Wrench,
+  ImagePlus,
+  X,
+  Lightbulb,
+  Square,
+} from "lucide-react";
 import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
 import Sidebar from "./components/Sidebar";
@@ -33,8 +41,15 @@ const SUGGESTIONS = [
 
 export default function ChatPage() {
   const { user } = useAuthStore();
-  const { messages, isSending, error, loadSessions, sendMessage, clearError } =
-    useChatStore();
+  const {
+    messages,
+    isSending,
+    error,
+    loadSessions,
+    sendMessage,
+    clearError,
+    stopStreaming,
+  } = useChatStore();
 
   const [input, setInput] = useState("");
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
@@ -47,7 +62,9 @@ export default function ChatPage() {
   }, [loadSessions]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({
+      behavior: isSending ? "auto" : "smooth",
+    });
   }, [messages, isSending]);
 
   useEffect(() => {
@@ -148,13 +165,48 @@ export default function ChatPage() {
                   <div
                     className={`${styles.messageBubble} ${msg.role === "user" ? styles.messageBubbleUser : styles.messageBubbleBot}`}
                   >
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {msg.content}
-                    </ReactMarkdown>
+                    {msg.role === "assistant" && msg.thoughts && (
+                      <details
+                        className={styles.toolResults}
+                        style={{ marginBottom: msg.content ? "1rem" : "0" }}
+                      >
+                        <summary className={styles.toolResultsSummary}>
+                          <Lightbulb
+                            size={12}
+                            style={{
+                              display: "inline",
+                              verticalAlign: -2,
+                              marginRight: 4,
+                            }}
+                          />
+                          Quá trình suy nghĩ
+                        </summary>
+                        <div className={styles.toolResultsList}>
+                          <div className={styles.toolResultItem}>
+                            <div
+                              className={styles.toolResultData}
+                              style={{ whiteSpace: "pre-wrap", opacity: 0.8 }}
+                            >
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                {msg.thoughts}
+                              </ReactMarkdown>
+                            </div>
+                          </div>
+                        </div>
+                      </details>
+                    )}
+                    {msg.content && (
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {msg.content}
+                      </ReactMarkdown>
+                    )}
                     {msg.role === "assistant" &&
                       msg.tool_results &&
                       msg.tool_results.length > 0 && (
-                        <details className={styles.toolResults}>
+                        <details
+                          className={styles.toolResults}
+                          style={{ marginTop: "1rem" }}
+                        >
                           <summary className={styles.toolResultsSummary}>
                             <Wrench
                               size={12}
@@ -192,57 +244,32 @@ export default function ChatPage() {
                           </div>
                         </details>
                       )}
-                    {msg.role === "assistant" && msg.thoughts && (
-                      <details
-                        className={styles.toolResults}
-                        style={{ marginTop: "1rem" }}
-                      >
-                        <summary className={styles.toolResultsSummary}>
-                          <Lightbulb
-                            size={12}
-                            style={{
-                              display: "inline",
-                              verticalAlign: -2,
-                              marginRight: 4,
-                            }}
+                    {msg.role === "assistant" &&
+                      isSending &&
+                      msg.id === messages[messages.length - 1]?.id && (
+                        <div
+                          className={styles.typingDots}
+                          style={{ padding: "8px 0", margin: 0 }}
+                        >
+                          <div
+                            className={styles.typingDot}
+                            style={{ opacity: 0.5 }}
                           />
-                          Quá trình suy nghĩ
-                        </summary>
-                        <div className={styles.toolResultsList}>
-                          <div className={styles.toolResultItem}>
-                            <div
-                              className={styles.toolResultData}
-                              style={{ whiteSpace: "pre-wrap", opacity: 0.8 }}
-                            >
-                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                {msg.thoughts}
-                              </ReactMarkdown>
-                            </div>
-                          </div>
+                          <div
+                            className={styles.typingDot}
+                            style={{ opacity: 0.5 }}
+                          />
+                          <div
+                            className={styles.typingDot}
+                            style={{ opacity: 0.5 }}
+                          />
                         </div>
-                      </details>
-                    )}
+                      )}
                   </div>
                 </div>
               ))}
 
-              {isSending && (
-                <div className={styles.typingIndicator}>
-                  <div
-                    className={`${styles.messageAvatar} ${styles.messageAvatarBot}`}
-                  >
-                    <Bot size={16} />
-                  </div>
-                  <div className={styles.typingDots}>
-                    <div className={styles.typingDot} />
-                    <div className={styles.typingDot} />
-                    <div className={styles.typingDot} />
-                  </div>
-                  <span className={styles.typingText}>
-                    JARVIS đang suy nghĩ...
-                  </span>
-                </div>
-              )}
+              {/* Removed standalone top Stop button to place it in the input row */}
             </>
           )}
           <div ref={messagesEndRef} />
@@ -308,16 +335,25 @@ export default function ChatPage() {
                 rows={1}
                 disabled={isSending}
               />
-              <button
-                className={styles.sendBtn}
-                onClick={handleSend}
-                disabled={
-                  (!input.trim() && selectedImages.length === 0) || isSending
-                }
-                title="Gửi"
-              >
-                <Send size={20} />
-              </button>
+              {isSending ? (
+                <button
+                  className={`${styles.sendBtn} ${styles.stopBtn}`}
+                  onClick={() => stopStreaming()}
+                  title="Dừng sinh kết quả"
+                  style={{ background: "#fee2e2", color: "#ef4444" }}
+                >
+                  <Square size={20} fill="currentColor" />
+                </button>
+              ) : (
+                <button
+                  className={styles.sendBtn}
+                  onClick={handleSend}
+                  disabled={!input.trim() && selectedImages.length === 0}
+                  title="Gửi"
+                >
+                  <Send size={20} />
+                </button>
+              )}
             </div>
           </div>
         </div>

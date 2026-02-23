@@ -12,6 +12,65 @@ export const chatService = {
     return res.data;
   },
 
+  async streamMessage(
+    data: ChatRequest,
+    signal: AbortSignal,
+    onEvent: (eventRaw: string) => void,
+  ): Promise<void> {
+    const API_BASE =
+      import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+    const token = localStorage.getItem("token");
+
+    const response = await fetch(`${API_BASE}/agent/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(data),
+      signal,
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        window.location.href = "/login";
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    if (!response.body) throw new Error("No response body");
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split("\n\n");
+        // Keep the last partial chunk in the buffer
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const jsonStr = line.substring(6).trim();
+            if (jsonStr) {
+              onEvent(jsonStr);
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  },
+
   async uploadImage(file: File): Promise<string> {
     const formData = new FormData();
     formData.append("file", file);

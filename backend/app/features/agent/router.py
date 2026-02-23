@@ -4,9 +4,12 @@ Agent feature: Chat API route.
 
 import uuid
 import os
+import json
+import asyncio
 
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi.responses import StreamingResponse
 from supabase import Client
 from langchain_core.messages import HumanMessage, ToolMessage
 
@@ -109,13 +112,13 @@ def _build_db_content(message: str, image_urls: list[str] | None) -> str:
     return f"{md_images}\n\n{message}"
 
 
-@router.post("/chat", response_model=ChatResponse)
+@router.post("/chat")
 async def chat(
     data: ChatRequest,
     user_id: str = Depends(get_current_user_id),
     db: Client = Depends(get_db),
 ):
-    """Chat with the AI agent."""
+    """Chat with the AI agent using SSE."""
     memory = MemoryManager(db, user_id)
 
     # 1. Get or create session
@@ -146,87 +149,85 @@ async def chat(
         "conversation_summary": session.get("summary", ""),
     }
 
-    # 7. Run agent graph
-    try:
-        graph = get_agent_graph()
-        result = await graph.ainvoke(
-            state,
-            config={"recursion_limit": get_settings().AGENT_RECURSION_LIMIT},
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
+    async def generate_chat_stream():
+        response_text = ""
+        thoughts_text = ""
+        tool_results = []
+        tool_calls_data = []
 
-    # 8. Extract response and tool results
-    ai_message = result["messages"][-1]
-    response_content = ai_message.content
+        try:
+            graph = get_agent_graph()
+            async for event in graph.astream_events(
+                state,
+                version="v2",
+                config={"recursion_limit": get_settings().AGENT_RECURSION_LIMIT},
+            ):
+                kind = event["event"]
 
-    # Gemini 3 may return content as list of dicts: {'type':'text','text':'...'} or {'type':'thinking','thinking':'...'}
-    response_text = ""
-    thoughts_text = ""
-    
-    if "thought" in ai_message.additional_kwargs:
-        thoughts_text = ai_message.additional_kwargs["thought"]
+                if kind == "on_chat_model_stream":
+                    chunk = event["data"]["chunk"]
+                    content = chunk.content
+                    
+                    if isinstance(content, list):
+                        for part in content:
+                            if isinstance(part, dict):
+                                if part.get("type") == "thinking":
+                                    thinking = part.get("thinking", "")
+                                    if thinking:
+                                        thoughts_text += thinking
+                                        yield f"data: {json.dumps({'type': 'thinking', 'content': thinking})}\n\n"
+                                elif part.get("type") == "text":
+                                    text = part.get("text", "")
+                                    if text:
+                                        response_text += text
+                                        yield f"data: {json.dumps({'type': 'message', 'content': text})}\n\n"
+                    elif isinstance(content, str) and content:
+                        response_text += content
+                        yield f"data: {json.dumps({'type': 'message', 'content': content})}\n\n"
 
-    if isinstance(response_content, list):
-        for part in response_content:
-            if isinstance(part, dict):
-                if part.get("type") == "thinking":
-                    thoughts_text += part.get("thinking", "") + "\n"
-                elif part.get("type") == "text":
-                    response_text += part.get("text", "") + "\n"
-                elif "thought" in part and part["thought"]:
-                    # Legacy fallback
-                    thoughts_text += part.get("text", "") + "\n"
-                else:
-                    response_text += part.get("text", "") + "\n"
-    else:
-        response_text = str(response_content)
+                elif kind == "on_tool_start":
+                    name = event.get("name")
+                    yield f"data: {json.dumps({'type': 'tool_call', 'status': 'start', 'name': name})}\n\n"
 
-    # Extract tool results from message history for transparency
-    tool_results = []
-    tool_calls_data = []
-    for msg in result["messages"]:
-        # Collect tool call args
-        if hasattr(msg, "tool_calls") and msg.tool_calls:
-            for tc in msg.tool_calls:
-                tool_calls_data.append({"name": tc["name"], "args": tc.get("args", {})})
-        # Collect tool results
-        if isinstance(msg, ToolMessage):
-            # Find matching tool call args
-            matching_args = {}
-            for tc_data in tool_calls_data:
-                if tc_data["name"] == msg.name:
-                    matching_args = tc_data["args"]
-                    break
-            # Clean args: remove user_id for privacy
-            clean_args = {k: v for k, v in matching_args.items() if k != "user_id"}
-            tool_results.append(ToolResult(
-                tool_name=msg.name,
-                tool_args=clean_args,
-                result=str(msg.content)[:2000],  # Limit size
-            ))
+                elif kind == "on_tool_end":
+                    name = event.get("name")
+                    data_event = event.get("data", {})
+                    output = data_event.get("output")
+                    # Extract tool call result
+                    result_str = str(output)[:2000] if output else ""
+                    yield f"data: {json.dumps({'type': 'tool_call', 'status': 'end', 'name': name, 'result': result_str})}\n\n"
+                    
+                    tool_calls_data.append({"name": name, "args": {}})
+                    tool_results.append(ToolResult(tool_name=name, tool_args={}, result=result_str))
 
-    # 9. Save AI response to DB (include tool_calls for DB record)
-    saved_tool_calls = None
-    if tool_calls_data:
-        saved_tool_calls = [{"name": tc["name"], "args": tc["args"]} for tc in tool_calls_data]
-    memory.save_message(session_id, "assistant", response_text, saved_tool_calls)
+            # 9. Save AI response to DB (include tool_calls for DB record)
+            saved_tool_calls = [{"name": tc["name"], "args": tc["args"]} for tc in tool_calls_data] if tool_calls_data else None
+            memory.save_message(session_id, "assistant", response_text, saved_tool_calls)
 
-    # 10. Maybe trigger summary (async, non-blocking)
-    all_messages = history + [HumanMessage(content=human_content)]
-    await memory.maybe_summarize(session_id, all_messages)
+            # 10. Auto-generate session title for new sessions
+            if is_new_session:
+                await memory.generate_session_title(session_id, data.message)
 
-    # 11. Auto-generate session title for new sessions
-    if is_new_session:
-        await memory.generate_session_title(session_id, data.message)
+            # 11. Maybe trigger summary (async, non-blocking)
+            all_messages = history + [HumanMessage(content=human_content)]
+            await memory.maybe_summarize(session_id, all_messages)
 
-    return ChatResponse(
-        response=response_text.strip(),
-        session_id=session_id,
-        tool_results=tool_results,
-        tools_used=list(set(tc["name"] for tc in tool_calls_data)) if tool_calls_data else [],
-        thoughts=thoughts_text.strip() if thoughts_text else None,
-    )
+            # Finish stream
+            yield f"data: {json.dumps({'type': 'done', 'session_id': session_id})}\n\n"
+
+        except asyncio.CancelledError:
+            # Client disconnected / Aborted
+            print(f"Chat stream cancelled for session {session_id}")
+            yield f"data: {json.dumps({'type': 'error', 'content': '\\n\\n*[Đã ngắt kết nối]*'})}\n\n"
+            if response_text:
+                memory.save_message(session_id, "assistant", response_text + "\n\n*[Đã ngắt kết nối]*")
+        except Exception as e:
+            print(f"Chat stream error: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'content': f'\\n\\n*[Lỗi hệ thống: {str(e)}]*'})}\n\n"
+            if response_text:
+                memory.save_message(session_id, "assistant", response_text + f"\n\n*[Lỗi]*")
+
+    return StreamingResponse(generate_chat_stream(), media_type="text/event-stream")
 
 
 @router.get("/sessions")
