@@ -315,11 +315,22 @@ function SchoolForm() {
 }
 
 function SystemConfig() {
-  const { user, updateAgentConfig } = useAuthStore();
+  const { user, updateAgentConfig, updatePreferences } = useAuthStore();
   const [updating, setUpdating] = useState(false);
 
   const currentVerbosity =
     (user?.agent_config?.response_detail as string) || "Đầy đủ (Chi tiết)";
+
+  // Weather preferences state
+  const prefs = (user?.preferences || {}) as Record<string, unknown>;
+  const [defaultLoc, setDefaultLoc] = useState(
+    (prefs.default_location as string) || "",
+  );
+  const [cacheTtl, setCacheTtl] = useState(
+    String((prefs.weather_cache_ttl as number) || 1800),
+  );
+  const [weatherSaving, setWeatherSaving] = useState(false);
+  const [weatherSuccess, setWeatherSuccess] = useState("");
 
   const handleVerbosityChange = async (
     e: React.ChangeEvent<HTMLSelectElement>,
@@ -335,6 +346,29 @@ function SystemConfig() {
       setUpdating(false);
     }
   };
+
+  const handleSaveWeather = async () => {
+    setWeatherSaving(true);
+    setWeatherSuccess("");
+    try {
+      await updatePreferences({
+        ...prefs,
+        default_location: defaultLoc || undefined,
+        weather_cache_ttl: parseInt(cacheTtl, 10) || 1800,
+      });
+      setWeatherSuccess("Đã lưu cấu hình thời tiết!");
+      setTimeout(() => setWeatherSuccess(""), 3000);
+    } finally {
+      setWeatherSaving(false);
+    }
+  };
+
+  const ttlOptions = [
+    { label: "15 phút", value: "900" },
+    { label: "30 phút", value: "1800" },
+    { label: "1 giờ", value: "3600" },
+    { label: "2 giờ", value: "7200" },
+  ];
 
   return (
     <div className={styles.card}>
@@ -394,6 +428,69 @@ function SystemConfig() {
           <option value="Đầy đủ (Chi tiết)">Đầy đủ (Chi tiết)</option>
           <option value="Ngắn gọn (Tóm tắt)">Ngắn gọn (Tóm tắt)</option>
         </select>
+      </div>
+
+      {/* ── Weather Settings ───────────────────────────────── */}
+      <div
+        style={{
+          borderTop: "1px solid var(--border-light)",
+          margin: "16px 0",
+          paddingTop: "16px",
+        }}
+      >
+        <div className={styles.toggleLabel} style={{ marginBottom: 8 }}>
+          ☁️ Cấu hình thời tiết
+        </div>
+        <div className={styles.toggleDesc} style={{ marginBottom: 12 }}>
+          Thiết lập vị trí mặc định và thời gian làm mới cho Widget thời tiết &
+          AI Agent.
+        </div>
+
+        {weatherSuccess && (
+          <div className={styles.success} style={{ marginBottom: 8 }}>
+            ✅ {weatherSuccess}
+          </div>
+        )}
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "12px",
+            alignItems: "end",
+          }}
+        >
+          <div className={styles.field}>
+            <label>Vị trí mặc định</label>
+            <input
+              placeholder="VD: Trà Vinh, Hà Nội"
+              value={defaultLoc}
+              onChange={(e) => setDefaultLoc(e.target.value)}
+            />
+          </div>
+          <div className={styles.field}>
+            <label>Thời gian làm mới</label>
+            <select
+              value={cacheTtl}
+              onChange={(e) => setCacheTtl(e.target.value)}
+              style={{ padding: "8px 12px" }}
+            >
+              {ttlOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <button
+          className={styles.saveBtn}
+          onClick={handleSaveWeather}
+          disabled={weatherSaving}
+          style={{ marginTop: 12, width: "100%" }}
+        >
+          {weatherSaving ? "Đang lưu..." : "Lưu cấu hình thời tiết"}
+        </button>
       </div>
     </div>
   );

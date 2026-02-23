@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     # ── Tavily (AI Search Engine) ────────────────────────
     TAVILY_API_KEY: str = ""  # Free tier: 1000 req/month
 
+    # ── OpenWeather (Weather API) ────────────────────────
+    OPENWEATHER_API_KEY: str = ""
+
     # ── Agent ────────────────────────────────────────────
     AGENT_RECURSION_LIMIT: int = 25  # Max graph steps (agent+tool nodes per turn)
     AGENT_MEMORY_WINDOW_SIZE: int = 7

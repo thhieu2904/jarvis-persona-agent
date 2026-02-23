@@ -16,6 +16,7 @@ interface AuthState {
     studentId?: string,
   ) => Promise<void>;
   updateAgentConfig: (config: Record<string, unknown>) => Promise<void>;
+  updatePreferences: (prefs: Record<string, unknown>) => Promise<void>;
   logout: () => void;
   loadFromStorage: () => void;
   clearError: () => void;
@@ -67,7 +68,18 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ user: updatedUser });
     } catch (err: any) {
       console.error("Failed to update agent config:", err);
-      // Optional: set error state if you want UI feedback
+    }
+  },
+
+  updatePreferences: async (prefs) => {
+    try {
+      const updatedUser = await authService.updateProfile({
+        preferences: prefs,
+      } as any);
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+      set({ user: updatedUser });
+    } catch (err: any) {
+      console.error("Failed to update preferences:", err);
     }
   },
 

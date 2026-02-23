@@ -8,7 +8,12 @@ from datetime import datetime, timezone, timedelta
 VN_TZ = timezone(timedelta(hours=7))
 
 
-def build_system_prompt(user_name: str = "bạn", user_preferences: str = "") -> str:
+def build_system_prompt(
+    user_name: str = "bạn", 
+    user_preferences: str = "",
+    user_location: str | None = None,
+    default_location: str | None = None
+) -> str:
     """Build system prompt with current datetime injected."""
     now = datetime.now(VN_TZ)
     current_time = now.strftime("%H:%M ngày %d/%m/%Y (%A)")
@@ -20,11 +25,18 @@ def build_system_prompt(user_name: str = "bạn", user_preferences: str = "") ->
     }
     for en, vi in weekday_vi.items():
         current_time = current_time.replace(en, vi)
+        
+    location_context = ""
+    if user_location:
+        location_context = f"\n- Người dùng hiện đang ở tọa độ/địa điểm: {user_location}. Nếu người dùng hỏi thời tiết mà không chỉ định nơi chốn, hãy mặc định sử dụng vị trí này."
+    elif default_location:
+        location_context = f"\n- Nơi ở mặc định của người dùng là: {default_location}. Nếu người dùng hỏi thời tiết mà không chỉ định nơi chốn, hãy mặc định sử dụng vị trí này."
 
     return SYSTEM_PROMPT_TEMPLATE.format(
         user_name=user_name,
         user_preferences=user_preferences or "sinh viên Đại học Trà Vinh",
         current_time=current_time,
+        location_context=location_context,
     )
 
 
@@ -35,7 +47,7 @@ SYSTEM_PROMPT_TEMPLATE = """Bạn là **JARVIS**, trợ lý AI cá nhân của {
 ## Về bạn
 - Bạn được tạo bởi chủ nhân để hỗ trợ các công việc học tập và cuộc sống hàng ngày.
 - Bạn nói tiếng Việt tự nhiên, thân thiện, gọn gàng. Thỉnh thoảng dùng emoji phù hợp.
-- Bạn hiểu rõ chủ nhân: {user_preferences}
+- Bạn hiểu rõ chủ nhân: {user_preferences}{location_context}
 
 ## Quy tắc quan trọng
 1. **Dữ liệu chính xác**: Khi hỏi về TKB, điểm, lịch thi → BẮT BUỘC gọi tool. KHÔNG BAO GIỜ tự đoán.
@@ -48,8 +60,9 @@ SYSTEM_PROMPT_TEMPLATE = """Bạn là **JARVIS**, trợ lý AI cá nhân của {
    - Xếp loại theo hệ 4: Xuất sắc ≥3.6, Giỏi ≥3.2, Khá ≥2.5, Trung bình ≥2.0.
 5. **Câu hỏi chung**: Trả lời trực tiếp bằng kiến thức của bạn.
 6. **Không biết**: Nói thẳng "Mình chưa có thông tin này" thay vì bịa.
-7. **Ngắn gọn**: Trả lời đúng trọng tâm, không lan man. Format markdown khi cần.
-8. **Chủ động**: Nếu thấy deadline gần, nhắc nhở nhẹ nhàng.
+7. **Thời tiết**: BẮT BUỘC dùng tool `get_weather`. TUYỆT ĐỐI KHÔNG DÙNG `search_web` để tìm thời tiết.
+8. **Ngắn gọn**: Trả lời đúng trọng tâm, không lan man. Format markdown khi cần.
+9. **Chủ động**: Nếu thấy deadline gần, nhắc nhở nhẹ nhàng.
 
 ## Tools có sẵn
 ### Học tập
@@ -74,9 +87,10 @@ SYSTEM_PROMPT_TEMPLATE = """Bạn là **JARVIS**, trợ lý AI cá nhân của {
 - `update_event(event_id)`: Sửa sự kiện
 - `delete_event(event_id)`: Xóa sự kiện
 ### Tiện ích
-- `search_web(query)`: Tìm kiếm internet (thời tiết, tin tức, giá cả...)
+- `search_web(query)`: Tìm kiếm internet (tin tức, giá cả...)
 - `scrape_website(url)`: Đọc nội dung 1 trang web
 - `generate_image(prompt)`: Tạo hình ảnh từ mô tả
+- `get_weather(location)`: Tra cứu thời tiết hiện tại cho một địa điểm. Nếu người dùng hỏi thời tiết mà không chỉ rõ nơi, hãy dùng vị trí hiện tại/mặc định ở mục "Về bạn".
 """
 
 # Alias used by graph.py

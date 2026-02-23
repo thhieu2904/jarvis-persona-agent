@@ -6,6 +6,9 @@ import uuid
 import os
 import json
 import asyncio
+import time
+import urllib.request
+import ssl
 
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
@@ -25,6 +28,7 @@ class ChatRequest(BaseModel):
     message: str
     session_id: str | None = None
     images: list[str] | None = None  # Public URLs from Supabase Storage
+    user_location: str | None = None  # Location string for context
 
 
 class UploadResponse(BaseModel):
@@ -140,12 +144,17 @@ async def chat(
     db_content = _build_db_content(data.message, data.images)
     memory.save_message(session_id, "user", db_content)
 
+    # 5b. Get user location preferences
+    default_loc, _ = memory.get_weather_prefs()
+
     # 6. Prepare state
     state = {
         "messages": trimmed_history,
         "user_id": user_id,
         "user_name": memory.get_user_name(),
         "user_preferences": memory.get_user_preferences(),
+        "user_location": data.user_location,
+        "default_location": default_loc,
         "conversation_summary": session.get("summary", ""),
     }
 
@@ -295,4 +304,88 @@ async def delete_session(
     # Delete the session. Messages are deleted automatically due to foreign key cascade.
     db.table("conversation_sessions").delete().eq("id", session_id).execute()
     return {"message": "Cuộc trò chuyện đã được xóa"}
+
+
+_weather_cache = {}
+
+@router.get("/weather")
+async def get_weather_data(
+    lat: float | None = None,
+    lon: float | None = None,
+    user_id: str = Depends(get_current_user_id),
+    db: Client = Depends(get_db),
+):
+    """Get current weather data for the user's location (from coords or profile)."""
+    memory = MemoryManager(db, user_id)
+    default_loc, cache_ttl = memory.get_weather_prefs()
+    
+    settings = get_settings()
+    api_key = settings.OPENWEATHER_API_KEY
+    if not api_key:
+        raise HTTPException(status_code=500, detail="Missing OPENWEATHER_API_KEY")
+
+    # Determine query and cache key
+    cache_key = ""
+    prompt = ""
+    
+    try:
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+
+        if lat is not None and lon is not None:
+            # Reverse geocoding
+            geo_url = f"http://api.openweathermap.org/geo/1.0/reverse?lat={lat}&lon={lon}&limit=1&appid={api_key}"
+            geo_req = urllib.request.Request(geo_url)
+            with urllib.request.urlopen(geo_req, context=ctx, timeout=10) as geo_res:
+                geo_data = json.loads(geo_res.read())
+                if geo_data and len(geo_data) > 0:
+                    city_name = geo_data[0].get("local_names", {}).get("vi", geo_data[0].get("name", ""))
+                    state = geo_data[0].get("state", "")
+                    loc_str = f"{city_name}, {state}" if state else city_name
+                    # Round coords to 2 decimals to improve cache hit rate
+                    cache_key = f"{round(lat, 2)},{round(lon, 2)}"
+                    prompt = f"Thời tiết hiện tại ở {loc_str} thế nào?"
+                else:
+                    cache_key = f"{round(lat, 2)},{round(lon, 2)}"
+                    prompt = f"Thời tiết hiện tại ở tọa độ {lat}, {lon} thế nào?"
+        else:
+            loc = default_loc or "Trà Vinh"
+            cache_key = loc
+            prompt = f"Thời tiết hiện tại ở {loc} thế nào?"
+
+        # Check cache
+        now = time.time()
+        cached_entry = _weather_cache.get(cache_key)
+        if cached_entry and now < cached_entry["expire_at"]:
+            return cached_entry["data"]
+
+        # Request OpenWeather Assistant
+        url = "https://api.openweathermap.org/assistant/session"
+        headers = {"Content-Type": "application/json", "X-Api-Key": api_key}
+        data = json.dumps({"prompt": prompt}).encode("utf-8")
+        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+        
+        with urllib.request.urlopen(req, context=ctx, timeout=15) as response:
+            res_data = response.read()
+            json_res = json.loads(res_data)
+            
+            if "answer" in json_res or json_res:
+                # Add the actual location string to the response so frontend can show it
+                if lat is not None and lon is not None and "loc_str" in locals() and loc_str:
+                    json_res["location"] = loc_str
+                
+                # Successfully retrieved data
+                _weather_cache[cache_key] = {"data": json_res, "expire_at": now + cache_ttl}
+                return json_res
+            elif cached_entry:
+                # AI didn't return proper data structure, fallback to stale cache
+                return cached_entry["data"]
+                
+            return json_res
+            
+    except Exception as e:
+        if 'cached_entry' in locals() and cached_entry:
+            return cached_entry["data"]
+        raise HTTPException(status_code=500, detail=f"Lỗi khi lấy thông tin thời tiết: {str(e)}")
 

@@ -1,8 +1,9 @@
 .settingsPage {
-  min-height: 100vh;
+  height: 100vh;
   background: var(--bg-primary);
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
 }
 
 .header {

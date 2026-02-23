@@ -1,3 +1,4 @@
+import WeatherWidget from "./WeatherWidget";
 import CalendarWidget from "./CalendarWidget";
 import TasksWidget from "./TasksWidget";
 import NotesListWidget from "./NotesListWidget";
@@ -7,6 +8,7 @@ export default function FeaturePanel() {
   return (
     <aside className={styles.featurePanel}>
       <div className={styles.featurePanelContent}>
+        <WeatherWidget />
         <CalendarWidget />
         <TasksWidget />
         <NotesListWidget />

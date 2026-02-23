@@ -31,6 +31,7 @@ from app.features.notes.tools import save_quick_note, search_notes, list_notes, 
 from app.features.calendar.tools import create_event, get_events, update_event, delete_event
 from app.features.agent.tools.web_search import web_tools
 from app.features.agent.tools.image_gen import image_tools
+from app.features.agent.tools.weather import weather_tools
 
 
 # ── State Definition ─────────────────────────────────────
@@ -40,6 +41,8 @@ class AgentState(TypedDict):
     user_id: str
     user_name: str
     user_preferences: str
+    user_location: str | None
+    default_location: str | None
     conversation_summary: str
 
 
@@ -56,6 +59,8 @@ ALL_TOOLS = [
     # Web Search & Image Gen (Phase 1)
     *web_tools,
     *image_tools,
+    # Weather Tool
+    *weather_tools,
 ]
 
 
@@ -78,6 +83,8 @@ def build_agent_graph():
         system_msg = SystemMessage(content=build_system_prompt(
             user_name=state.get("user_name", "bạn"),
             user_preferences=state.get("user_preferences", "Chưa có thông tin"),
+            user_location=state.get("user_location"),
+            default_location=state.get("default_location"),
         ))
 
         # Prepend summary if exists

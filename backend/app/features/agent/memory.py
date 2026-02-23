@@ -122,6 +122,31 @@ class MemoryManager:
                 
         return "\n".join(parts) if parts else "Chưa có thông tin"
 
+    def get_weather_prefs(self) -> tuple[str | None, int]:
+        """Get default location and cache TTL from user preferences."""
+        try:
+            result = (
+                self.db.table("users")
+                .select("preferences")
+                .eq("id", self.user_id)
+                .single()
+                .execute()
+            )
+        except Exception:
+            return None, 1800
+            
+        if not result.data:
+            return None, 1800
+            
+        prefs = result.data.get("preferences", {})
+        default_location = prefs.get("default_location")
+        try:
+            cache_ttl = int(prefs.get("weather_cache_ttl", 1800))
+        except (ValueError, TypeError):
+            cache_ttl = 1800
+            
+        return default_location, cache_ttl
+
     def get_user_name(self) -> str:
         """Get user's display name."""
         result = (

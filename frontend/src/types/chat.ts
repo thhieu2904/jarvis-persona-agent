@@ -33,6 +33,7 @@ export interface ChatRequest {
   message: string;
   session_id?: string;
   images?: string[];
+  user_location?: string;
 }
 
 export interface ChatResponse {
