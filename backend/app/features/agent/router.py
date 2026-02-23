@@ -2,11 +2,15 @@
 Agent feature: Chat API route.
 """
 
+import uuid
+import os
+
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from supabase import Client
 from langchain_core.messages import HumanMessage, ToolMessage
 
+from app.config import get_settings
 from app.core.dependencies import get_db, get_current_user_id
 from app.features.agent.graph import get_agent_graph
 from app.features.agent.memory import MemoryManager
@@ -17,6 +21,11 @@ router = APIRouter()
 class ChatRequest(BaseModel):
     message: str
     session_id: str | None = None
+    images: list[str] | None = None  # Public URLs from Supabase Storage
+
+
+class UploadResponse(BaseModel):
+    url: str
 
 
 class ToolResult(BaseModel):
@@ -30,6 +39,73 @@ class ChatResponse(BaseModel):
     session_id: str
     tool_results: list[ToolResult] = []
     tools_used: list[str] = []
+
+
+@router.post("/upload_image", response_model=UploadResponse)
+async def upload_image(
+    file: UploadFile = File(...),
+    user_id: str = Depends(get_current_user_id),
+    db: Client = Depends(get_db),
+):
+    """Upload an image to Supabase Storage and return its public URL."""
+    settings = get_settings()
+    allowed_types = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail=f"Loại file không hỗ trợ: {file.content_type}")
+
+    # Max 10MB
+    contents = await file.read()
+    if len(contents) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File quá lớn (tối đa 10MB)")
+
+    # Generate unique filename
+    ext = os.path.splitext(file.filename or "image.jpg")[1] or ".jpg"
+    filename = f"{user_id}/{uuid.uuid4().hex}{ext}"
+
+    # Upload to Supabase Storage using service key client
+    from supabase import create_client
+    admin_db = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
+    try:
+        admin_db.storage.from_("chat-uploads").upload(
+            path=filename,
+            file=contents,
+            file_options={"content-type": file.content_type},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload thất bại: {str(e)}")
+
+    # Build public URL
+    public_url = f"{settings.SUPABASE_URL}/storage/v1/object/public/chat-uploads/{filename}"
+    return UploadResponse(url=public_url)
+
+
+def _build_multimodal_content(message: str, image_urls: list[str] | None) -> list[dict] | str:
+    """Build multimodal content blocks for LangChain HumanMessage.
+
+    If images are present, returns a list of content blocks.
+    Otherwise returns a plain string.
+    """
+    if not image_urls:
+        return message
+
+    content_blocks: list[dict] = []
+    for url in image_urls:
+        content_blocks.append({"type": "image_url", "image_url": {"url": url}})
+    content_blocks.append({"type": "text", "text": message})
+    return content_blocks
+
+
+def _build_db_content(message: str, image_urls: list[str] | None) -> str:
+    """Build the content string to save in the database.
+
+    Prepends Markdown image links so the frontend ReactMarkdown
+    component can render images automatically.
+    """
+    if not image_urls:
+        return message
+
+    md_images = "\n".join(f"![image]({url})" for url in image_urls)
+    return f"{md_images}\n\n{message}"
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -52,11 +128,13 @@ async def chat(
     # 3. Apply sliding window
     trimmed_history = memory.apply_sliding_window(history)
 
-    # 4. Add new user message
-    trimmed_history.append(HumanMessage(content=data.message))
+    # 4. Add new user message (multimodal if images present)
+    human_content = _build_multimodal_content(data.message, data.images)
+    trimmed_history.append(HumanMessage(content=human_content))
 
-    # 5. Save user message to DB
-    memory.save_message(session_id, "user", data.message)
+    # 5. Save user message to DB (Markdown format for UI rendering)
+    db_content = _build_db_content(data.message, data.images)
+    memory.save_message(session_id, "user", db_content)
 
     # 6. Prepare state
     state = {
@@ -69,7 +147,6 @@ async def chat(
 
     # 7. Run agent graph
     try:
-        from app.config import get_settings
         graph = get_agent_graph()
         result = await graph.ainvoke(
             state,
@@ -122,7 +199,7 @@ async def chat(
     memory.save_message(session_id, "assistant", response_text, saved_tool_calls)
 
     # 10. Maybe trigger summary (async, non-blocking)
-    all_messages = history + [HumanMessage(content=data.message)]
+    all_messages = history + [HumanMessage(content=human_content)]
     await memory.maybe_summarize(session_id, all_messages)
 
     # 11. Auto-generate session title for new sessions
