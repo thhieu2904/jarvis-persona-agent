@@ -83,6 +83,7 @@ def generate_image(prompt: str) -> str:
             result += " ".join(text_parts) + "\n\n"
 
         if image_urls:
+            result += f"prompt: {prompt}\n"
             result += "HINH ANH DA TAO (BAT BUOC hien thi bang cu phap Markdown nhu ben duoi):\n"
             for i, url in enumerate(image_urls, 1):
                 result += f"![Hinh anh {i}]({url})\n"
