@@ -28,7 +28,9 @@ export default function WeatherWidget() {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(true);
   const [locating, setLocating] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [locationName, setLocationName] = useState("Trà Vinh");
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const getCacheTtl = (): number => {
     try {
@@ -57,74 +59,97 @@ export default function WeatherWidget() {
     return "Trà Vinh";
   };
 
-  const fetchWeather = useCallback(async (lat?: number, lon?: number) => {
-    setLoading(true);
-    try {
-      // Check cache first
-      const cached = localStorage.getItem(CACHE_KEY);
-      if (cached) {
-        const parsed: CachedWeather = JSON.parse(cached);
-        // Only use cache if it's not expired AND it has actual data
-        if (
-          Date.now() < parsed.expire_time &&
-          parsed.data &&
-          Object.keys(parsed.data).length > 0
-        ) {
-          setWeather(parsed.data);
-          if (parsed.data.location) setLocationName(parsed.data.location);
-          setLoading(false);
-          return;
+  const fetchWeather = useCallback(
+    async (lat?: number, lon?: number) => {
+      setLoading(true);
+      try {
+        // Check cache first
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached && !refreshing) {
+          // Skip cache if we are manually refreshing
+          const parsed: CachedWeather = JSON.parse(cached);
+          // Only use cache if it's not expired AND it has actual data
+          if (
+            Date.now() < parsed.expire_time &&
+            parsed.data &&
+            Object.keys(parsed.data).length > 0
+          ) {
+            setWeather(parsed.data);
+            if (parsed.data.location) setLocationName(parsed.data.location);
+
+            // Deduce the last updated time from cache creation time (expire_time - ttl)
+            const ttl = getCacheTtl();
+            setLastUpdated(new Date(parsed.expire_time - ttl));
+
+            setLoading(false);
+            setRefreshing(false);
+            return;
+          }
         }
-      }
 
-      // Call backend API
-      const params: Record<string, string> = {};
-      if (lat !== undefined && lon !== undefined) {
-        params.lat = String(lat);
-        params.lon = String(lon);
-      }
-
-      const res = await api.get("/agent/weather", { params });
-      const data = res.data as WeatherData;
-      setWeather(data);
-
-      // Try to extract location name from the answer
-      let newLocationName = "";
-      if (data.location) {
-        newLocationName = data.location;
-        setLocationName(data.location);
-      } else {
-        newLocationName = lat
-          ? `${lat.toFixed(2)}, ${lon?.toFixed(2)}`
-          : getDefaultLocation();
-        setLocationName(newLocationName);
-      }
-
-      // If user fetched via GPS (lat/lon provided) and we got a location name, save it to DB
-      if (lat !== undefined && lon !== undefined && newLocationName && user) {
-        const currentPrefs = user.preferences || {};
-        if (currentPrefs.default_location !== newLocationName) {
-          updatePreferences({
-            ...currentPrefs,
-            default_location: newLocationName,
-          }).catch((err) =>
-            console.error("Failed to persist GPS location:", err),
-          );
+        // Call backend API
+        const params: Record<string, string> = {};
+        if (lat !== undefined && lon !== undefined) {
+          params.lat = String(lat);
+          params.lon = String(lon);
         }
-      }
 
-      // Save to cache with TTL
-      const cacheEntry: CachedWeather = {
-        data,
-        expire_time: Date.now() + getCacheTtl(),
-      };
-      localStorage.setItem(CACHE_KEY, JSON.stringify(cacheEntry));
-    } catch (err) {
-      console.error("Failed to fetch weather:", err);
-    } finally {
-      setLoading(false);
+        const res = await api.get("/agent/weather", { params });
+        const data = res.data as WeatherData;
+        setWeather(data);
+        setLastUpdated(new Date());
+
+        // Try to extract location name from the answer
+        let newLocationName = "";
+        if (data.location) {
+          newLocationName = data.location;
+          setLocationName(data.location);
+        } else {
+          newLocationName = lat
+            ? `${lat.toFixed(2)}, ${lon?.toFixed(2)}`
+            : getDefaultLocation();
+          setLocationName(newLocationName);
+        }
+
+        // If user fetched via GPS (lat/lon provided) and we got a location name, save it to DB
+        if (lat !== undefined && lon !== undefined && newLocationName && user) {
+          const currentPrefs = user.preferences || {};
+          if (currentPrefs.default_location !== newLocationName) {
+            updatePreferences({
+              ...currentPrefs,
+              default_location: newLocationName,
+            }).catch((err) =>
+              console.error("Failed to persist GPS location:", err),
+            );
+          }
+        }
+
+        // Save to cache with TTL
+        const cacheEntry: CachedWeather = {
+          data,
+          expire_time: Date.now() + getCacheTtl(),
+        };
+        localStorage.setItem(CACHE_KEY, JSON.stringify(cacheEntry));
+      } catch (err) {
+        console.error("Failed to fetch weather:", err);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [user, updatePreferences, refreshing],
+  );
+
+  const handleManualRefresh = () => {
+    setRefreshing(true);
+    // Setting refreshing=true will cause fetchWeather to bypass cache
+  };
+
+  useEffect(() => {
+    if (refreshing) {
+      fetchWeather();
     }
-  }, []);
+  }, [refreshing, fetchWeather]);
 
   // Load on mount with default location (no geolocation auto-prompt)
   useEffect(() => {
@@ -210,18 +235,31 @@ export default function WeatherWidget() {
           <CloudSun size={16} className={styles.widgetIcon} />
           <h3 className={styles.widgetTitle}>Thời tiết</h3>
         </div>
-        <button
-          className={styles.weatherLocationBtn}
-          onClick={handleUpdateLocation}
-          disabled={locating}
-          title="Cập nhật vị trí hiện tại"
-        >
-          {locating ? (
-            <RefreshCw size={14} className={styles.spinning} />
-          ) : (
-            <MapPin size={14} />
-          )}
-        </button>
+        <div style={{ display: "flex", gap: "4px" }}>
+          <button
+            className={styles.weatherLocationBtn}
+            onClick={handleManualRefresh}
+            disabled={refreshing || locating}
+            title="Làm mới dữ liệu"
+          >
+            <RefreshCw
+              size={14}
+              className={refreshing ? styles.spinning : ""}
+            />
+          </button>
+          <button
+            className={styles.weatherLocationBtn}
+            onClick={handleUpdateLocation}
+            disabled={locating || refreshing}
+            title="Cập nhật vị trí hiện tại"
+          >
+            {locating ? (
+              <RefreshCw size={14} className={styles.spinning} />
+            ) : (
+              <MapPin size={14} />
+            )}
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -258,9 +296,11 @@ export default function WeatherWidget() {
                 src={`https://openweathermap.org/img/wn/${info.icon}@2x.png`}
                 alt="Thời tiết"
                 style={{
-                  width: "50px",
-                  height: "50px",
-                  filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.1))",
+                  width: "64px",
+                  height: "64px",
+                  filter:
+                    "drop-shadow(0 4px 6px rgba(0,0,0,0.2)) drop-shadow(0 0 10px rgba(255,255,255,0.4))",
+                  transform: "scale(1.2) translateY(-4px)",
                 }}
               />
             )}
@@ -283,6 +323,23 @@ export default function WeatherWidget() {
 
           {info?.answer && info.temp === undefined && (
             <div className={styles.weatherAnswer}>{info.answer}</div>
+          )}
+
+          {lastUpdated && (
+            <div
+              style={{
+                fontSize: "10px",
+                color: "var(--text-muted)",
+                marginTop: "4px",
+                textAlign: "right",
+              }}
+            >
+              Cập nhật lúc:{" "}
+              {lastUpdated.toLocaleTimeString("vi-VN", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </div>
           )}
         </div>
       ) : (
