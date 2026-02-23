@@ -440,6 +440,13 @@
 }
 
 /* Markdown inside bot messages */
+.messageBubbleBot img {
+  max-width: 100%;
+  border-radius: var(--radius-md);
+  margin: var(--space-sm) 0;
+  display: block;
+}
+
 .messageBubbleBot h1,
 .messageBubbleBot h2,
 .messageBubbleBot h3 {
