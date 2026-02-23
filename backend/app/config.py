@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     SCHOOL_CACHE_TTL_HOURS: int = 24  # Cache expiry
     SCHOOL_API_TIMEOUT: int = 30  # HTTP timeout in seconds
 
+    # ── Tavily (AI Search Engine) ────────────────────────
+    TAVILY_API_KEY: str = ""  # Free tier: 1000 req/month
+
     # ── Agent ────────────────────────────────────────────
     AGENT_RECURSION_LIMIT: int = 25  # Max graph steps (agent+tool nodes per turn)
     AGENT_MEMORY_WINDOW_SIZE: int = 7
