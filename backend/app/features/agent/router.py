@@ -29,6 +29,7 @@ class ChatResponse(BaseModel):
     response: str
     session_id: str
     tool_results: list[ToolResult] = []
+    tools_used: list[str] = []
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -132,6 +133,7 @@ async def chat(
         response=response_text,
         session_id=session_id,
         tool_results=tool_results,
+        tools_used=list(set(tc["name"] for tc in tool_calls_data)) if tool_calls_data else [],
     )
 
 
@@ -178,3 +180,26 @@ async def get_session_messages(
         .execute()
     )
     return {"data": messages.data}
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(
+    session_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: Client = Depends(get_db),
+):
+    """Delete a chat session and all its messages (via ON DELETE CASCADE)."""
+    # Verify session belongs to user
+    session = (
+        db.table("conversation_sessions")
+        .select("id")
+        .eq("id", session_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    if not session.data:
+        raise HTTPException(status_code=404, detail="Session không tồn tại")
+
+    # Delete the session. Messages are deleted automatically due to foreign key cascade.
+    db.table("conversation_sessions").delete().eq("id", session_id).execute()
+    return {"message": "Cuộc trò chuyện đã được xóa"}
+

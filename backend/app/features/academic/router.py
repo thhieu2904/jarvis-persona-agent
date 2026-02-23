@@ -18,10 +18,16 @@ async def save_credentials(
     user_id: str = Depends(get_current_user_id),
     db: Client = Depends(get_db),
 ):
-    """Lưu (mã hóa) thông tin đăng nhập trường."""
+    """Lưu (mã hóa) thông tin đăng nhập trường sau khi kiểm tra."""
     service = AcademicService(db)
-    await service.save_credentials(user_id, data.mssv, data.password)
-    return {"message": "Đã lưu thông tin đăng nhập trường thành công"}
+    try:
+        await service.save_credentials(user_id, data.mssv, data.password)
+        return {"message": "Đã kết nối và lưu thông tin trường thành công"}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ConnectionError as e:
+        # Pass back a specific 504 for timeout / 502 for bad gateway if needed, but 503 is good.
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
 
 
 @router.post("/reconnect")
@@ -32,8 +38,13 @@ async def reconnect_credentials(
 ):
     """Re-connect: Xóa credentials cũ và lưu mới (khi mất key hoặc đổi mật khẩu)."""
     service = AcademicService(db)
-    await service.reconnect_credentials(user_id, data.mssv, data.password)
-    return {"message": "Đã kết nối lại tài khoản trường thành công"}
+    try:
+        await service.reconnect_credentials(user_id, data.mssv, data.password)
+        return {"message": "Đã kết nối lại tài khoản trường thành công"}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ConnectionError as e:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
 
 
 @router.get("/timetable")

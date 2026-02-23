@@ -96,7 +96,7 @@ class MemoryManager:
         """
         result = (
             self.db.table("users")
-            .select("preferences, full_name")
+            .select("preferences, agent_config, full_name")
             .eq("id", self.user_id)
             .single()
             .execute()
@@ -106,13 +106,20 @@ class MemoryManager:
             return "Chưa có thông tin"
 
         prefs = result.data.get("preferences", {})
-        if not prefs:
-            return "Chưa có thông tin"
-
-        # Format preferences into readable string
+        config = result.data.get("agent_config", {})
+        
         parts = []
-        for key, value in prefs.items():
-            parts.append(f"- {key}: {value}")
+        if config:
+            verbosity = config.get("response_detail", "Đầy đủ (Chi tiết)")
+            if verbosity == "Ngắn gọn (Tóm tắt)":
+                parts.append("- AI agent response instruction: MUST answer concisely, briefly, and to the point. Give the user the essential information and stop.")
+            else:
+                parts.append("- AI agent response instruction: Answer with detail and thorough explanation, being helpful and articulate.")
+
+        if prefs:
+            for key, value in prefs.items():
+                parts.append(f"- {key}: {value}")
+                
         return "\n".join(parts) if parts else "Chưa có thông tin"
 
     def get_user_name(self) -> str:

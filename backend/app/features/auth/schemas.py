@@ -25,6 +25,7 @@ class UpdateProfileRequest(BaseModel):
     student_id: str | None = None
     avatar_url: str | None = None
     preferences: dict | None = None
+    agent_config: dict | None = None
 
 
 # ── Responses ────────────────────────────────────────────

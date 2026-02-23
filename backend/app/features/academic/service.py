@@ -30,7 +30,22 @@ class AcademicService:
     # ── Credential Management ────────────────────────────
 
     async def save_credentials(self, user_id: str, mssv: str, password: str):
-        """Encrypt and save school credentials."""
+        """Encrypt and save school credentials after validating them."""
+        import httpx
+
+        # Validate credentials by attempting a login
+        client = SchoolAPIClient()
+        try:
+            await client.login(mssv, password)
+        except ValueError as e:
+            # Bad credentials (wrong MSSV/Password)
+            raise ValueError(f"Thông tin đăng nhập không hợp lệ: {str(e)}")
+        except (httpx.TimeoutException, httpx.ConnectError) as e:
+            # System errors (School API down / timeout)
+            raise ConnectionError("Hệ thống trường hiện không phản hồi. Vui lòng thử lại sau.")
+        finally:
+            await client.close()
+
         encrypted_user = encrypt_value(mssv)
         encrypted_pass = encrypt_value(password)
 
@@ -42,6 +57,7 @@ class AcademicService:
                 "user_id": user_id,
                 "school_username_enc": encrypted_user.decode("utf-8"),
                 "school_password_enc": encrypted_pass.decode("utf-8"),
+                "last_login_at": datetime.now(timezone.utc).isoformat(),
             },
             on_conflict="user_id",
         ).execute()
