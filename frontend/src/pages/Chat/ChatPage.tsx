@@ -16,6 +16,7 @@ import {
   X,
   Lightbulb,
   Square,
+  Mic,
 } from "lucide-react";
 import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
@@ -54,9 +55,81 @@ export default function ChatPage() {
 
   const [input, setInput] = useState("");
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
+  const [isListening, setIsListening] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(true);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<any>(null);
+  const silenceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debounceRef = useRef<boolean>(false);
+
+  const resetSilenceTimeout = useCallback(() => {
+    if (silenceTimeoutRef.current) {
+      clearTimeout(silenceTimeoutRef.current);
+    }
+    // Auto stop if silence for 5 seconds
+    silenceTimeoutRef.current = setTimeout(() => {
+      if (recognitionRef.current && isListening) {
+        recognitionRef.current.stop();
+        setIsListening(false);
+      }
+    }, 5000);
+  }, [isListening]);
+
+  useEffect(() => {
+    // Initialize SpeechRecognition
+    const SpeechRecognition =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "vi-VN";
+
+      recognition.onresult = (event: any) => {
+        let finalTranscript = "";
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          }
+        }
+        if (finalTranscript) {
+          setInput((prev) => {
+            const separator = prev && !prev.endsWith(" ") ? " " : "";
+            return prev + separator + finalTranscript;
+          });
+          resetSilenceTimeout();
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.error("Speech recognition error", event.error);
+        if (event.error === "not-allowed") {
+          alert(
+            "Vui lòng cấp quyền sử dụng Micro cho trình duyệt để dùng tính năng này.",
+          );
+        }
+        if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+    } else {
+      setSpeechSupported(false);
+    }
+
+    return () => {
+      if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+    };
+  }, [resetSilenceTimeout]);
 
   useEffect(() => {
     loadSessions();
@@ -111,6 +184,30 @@ export default function ChatPage() {
   const removeImage = useCallback((index: number) => {
     setSelectedImages((prev) => prev.filter((_, i) => i !== index));
   }, []);
+
+  const toggleListening = () => {
+    if (!recognitionRef.current || debounceRef.current) return;
+
+    // Anti-spam debounce
+    debounceRef.current = true;
+    setTimeout(() => {
+      debounceRef.current = false;
+    }, 500);
+
+    if (isListening) {
+      if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      try {
+        recognitionRef.current.start();
+        setIsListening(true);
+        resetSilenceTimeout();
+      } catch (err) {
+        console.error("Error starting speech recognition:", err);
+      }
+    }
+  };
 
   return (
     <div className={styles.chatLayout}>
@@ -336,6 +433,20 @@ export default function ChatPage() {
                 rows={1}
                 disabled={isSending}
               />
+              {speechSupported && (
+                <button
+                  className={`${styles.micBtn} ${isListening ? styles.micBtnRecording : ""}`}
+                  onClick={toggleListening}
+                  disabled={isSending}
+                  title={
+                    isListening
+                      ? "Ngừng thu âm (sẽ tự động dừng nếu không có tiếng)"
+                      : "Nhập bằng giọng nói"
+                  }
+                >
+                  <Mic size={20} />
+                </button>
+              )}
               {isSending ? (
                 <button
                   className={`${styles.sendBtn} ${styles.stopBtn}`}
