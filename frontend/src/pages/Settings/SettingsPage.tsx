@@ -15,6 +15,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { authService } from "../../services/auth.service";
 import { tasksService } from "../../services/tasks.service";
 import { notesService } from "../../services/notes.service";
+import IoTManagementTab from "./components/IoTManagementTab";
 import styles from "./SettingsPage.module.css";
 
 function getInitials(name: string): string {
@@ -31,6 +32,9 @@ export default function SettingsPage() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const [stats, setStats] = useState({ docs: 0, notes: 0, tasks: 0 });
+  const [activeTab, setActiveTab] = useState<"profile" | "iot" | "scheduler">(
+    "profile",
+  );
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -70,69 +74,109 @@ export default function SettingsPage() {
       </header>
 
       <div className={styles.content}>
-        <h1 className={styles.pageTitle}>Tổng quan tài khoản</h1>
-
-        <div className={styles.dashboardGrid}>
-          {/* ── Left Column: Personal Info ─────────────────────── */}
-          <div>
-            <div className={styles.card}>
-              <div className={styles.avatarSection}>
-                <div className={styles.avatarCircle}>
-                  {user?.avatar_url ? (
-                    <img
-                      src={user.avatar_url}
-                      alt="Avatar"
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        borderRadius: "50%",
-                        objectFit: "cover",
-                      }}
-                    />
-                  ) : (
-                    getInitials(user?.full_name || "?")
-                  )}
-                </div>
-                <div className={styles.userName}>{user?.full_name}</div>
-                <div className={styles.userTenure}>Tham gia từ {joinDate}</div>
-              </div>
-              <ProfileForm />
-            </div>
-          </div>
-
-          {/* ── Right Column ───────────────────────────────────── */}
-          <div>
-            {/* Stat Cards */}
-            <div className={styles.statsRow}>
-              <div className={styles.statCard}>
-                <div className={styles.statLabel}>
-                  <FileText size={14} className={styles.cardIcon} /> Tài liệu
-                  RAG
-                </div>
-                <div className={styles.statValue}>{stats.docs}</div>
-              </div>
-              <div className={styles.statCard}>
-                <div className={styles.statLabel}>
-                  <StickyNote size={14} className={styles.cardIcon} /> Ghi chú
-                  nhanh
-                </div>
-                <div className={styles.statValue}>{stats.notes}</div>
-              </div>
-              <div className={styles.statCard}>
-                <div className={styles.statLabel}>
-                  <CheckSquare size={14} className={styles.cardIcon} /> Nhiệm vụ
-                </div>
-                <div className={styles.statValue}>{stats.tasks}</div>
-              </div>
-            </div>
-
-            {/* School & Sync */}
-            <SchoolForm />
-
-            {/* System Settings */}
-            <SystemConfig />
-          </div>
+        <div className={styles.tabsContainer}>
+          <button
+            className={`${styles.tabButton} ${activeTab === "profile" ? styles.activeTab : ""}`}
+            onClick={() => setActiveTab("profile")}
+          >
+            Hồ sơ & Dữ liệu
+          </button>
+          <button
+            className={`${styles.tabButton} ${activeTab === "iot" ? styles.activeTab : ""}`}
+            onClick={() => setActiveTab("iot")}
+          >
+            Nhà thông minh (IoT)
+          </button>
+          {/* Sẵn khung cho tab sau */}
+          <button
+            className={`${styles.tabButton} ${activeTab === "scheduler" ? styles.activeTab : ""}`}
+            onClick={() => setActiveTab("scheduler")}
+          >
+            Lịch trình & Lối sống
+          </button>
         </div>
+
+        {activeTab === "profile" && (
+          <>
+            <h1 className={styles.pageTitle}>Tổng quan tài khoản</h1>
+
+            <div className={styles.dashboardGrid}>
+              {/* ── Left Column: Personal Info ─────────────────────── */}
+              <div>
+                <div className={styles.card}>
+                  <div className={styles.avatarSection}>
+                    <div className={styles.avatarCircle}>
+                      {user?.avatar_url ? (
+                        <img
+                          src={user.avatar_url}
+                          alt="Avatar"
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            borderRadius: "50%",
+                            objectFit: "cover",
+                          }}
+                        />
+                      ) : (
+                        getInitials(user?.full_name || "?")
+                      )}
+                    </div>
+                    <div className={styles.userName}>{user?.full_name}</div>
+                    <div className={styles.userTenure}>
+                      Tham gia từ {joinDate}
+                    </div>
+                  </div>
+                  <ProfileForm />
+                </div>
+              </div>
+
+              {/* ── Right Column ───────────────────────────────────── */}
+              <div>
+                {/* Stat Cards */}
+                <div className={styles.statsRow}>
+                  <div className={styles.statCard}>
+                    <div className={styles.statLabel}>
+                      <FileText size={14} className={styles.cardIcon} /> Tài
+                      liệu RAG
+                    </div>
+                    <div className={styles.statValue}>{stats.docs}</div>
+                  </div>
+                  <div className={styles.statCard}>
+                    <div className={styles.statLabel}>
+                      <StickyNote size={14} className={styles.cardIcon} /> Ghi
+                      chú
+                    </div>
+                    <div className={styles.statValue}>{stats.notes}</div>
+                  </div>
+                  <div className={styles.statCard}>
+                    <div className={styles.statLabel}>
+                      <CheckSquare size={14} className={styles.cardIcon} />{" "}
+                      Nhiệm vụ
+                    </div>
+                    <div className={styles.statValue}>{stats.tasks}</div>
+                  </div>
+                </div>
+
+                {/* School & Sync */}
+                <SchoolForm />
+
+                {/* System Settings */}
+                <SystemConfig />
+              </div>
+            </div>
+          </>
+        )}
+
+        {activeTab === "iot" && <IoTManagementTab />}
+
+        {activeTab === "scheduler" && (
+          <div
+            className={styles.card}
+            style={{ textAlign: "center", padding: "40px" }}
+          >
+            Tính năng cấu hình Lối sống AI và Thói quen đang được phát triển...
+          </div>
+        )}
       </div>
     </div>
   );

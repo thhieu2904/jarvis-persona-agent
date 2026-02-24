@@ -32,7 +32,8 @@ from app.features.calendar.tools import create_event, get_events, update_event, 
 from app.features.agent.tools.web_search import web_tools
 from app.features.agent.tools.image_gen import image_tools
 from app.features.agent.tools.weather import weather_tools
-
+from app.features.iot.tuya import list_smart_home_devices, toggle_smart_plug
+from app.features.agent.tools.scheduler_tools import schedule_automation
 
 # ── State Definition ─────────────────────────────────────
 class AgentState(TypedDict):
@@ -61,6 +62,11 @@ ALL_TOOLS = [
     *image_tools,
     # Weather Tool
     *weather_tools,
+    # Smart Home / IoT (Phase 2)
+    list_smart_home_devices,
+    toggle_smart_plug,
+    # Dynamic Scheduler
+    schedule_automation,
 ]
 
 

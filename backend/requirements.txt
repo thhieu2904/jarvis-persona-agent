@@ -28,3 +28,6 @@ httpx==0.28.*
 # langchain-community==0.3.*
 # pypdf==5.*
 # python-pptx==1.*
+
+# ── IoT Navigation ───────────────────────────────────────
+tinytuya>=1.17.6

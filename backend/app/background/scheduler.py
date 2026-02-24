@@ -13,7 +13,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 from app.config import get_settings
 from app.core.database import get_supabase_client
-from app.core.zalo import send_zalo_message
+from app.core.zalo import send_agent_response_to_zalo, send_zalo_message
 
 logger = logging.getLogger(__name__)
 
@@ -162,9 +162,9 @@ async def _execute_routine(routine_type: str):
             {"title": title_prefix}
         ).eq("id", session_id).execute()
 
-        # Send via Zalo Bot
+        # Send via Zalo Bot (Thin LLM Chain để lấy Sticker nếu có)
         zalo_text = f"{title_prefix}\n\n{response_text}"
-        await send_zalo_message(zalo_text)
+        await send_agent_response_to_zalo(zalo_text)
 
         logger.info(f"✅ {routine_type} routine completed successfully.")
 
@@ -249,6 +249,9 @@ def init_scheduler():
             logger.info(f"   - {job.id}: next run at {job.next_run_time}")
     else:
         logger.info("📅 Scheduler started (no active routines configured)")
+        
+    # Gọi Sync 1 lần ngay khi khởi động
+    sync_dynamic_jobs()
 
 
 def shutdown_scheduler():
@@ -256,3 +259,64 @@ def shutdown_scheduler():
     if scheduler.running:
         scheduler.shutdown(wait=False)
         logger.info("📅 Scheduler shut down.")
+
+# ── Dynamic AI Cronjobs ──────────────────────────────────
+async def run_dynamic_prompt_job(user_id: str, prompt: str, job_name: str):
+    """Callback for dynamic cronjobs. Runs the agent with the given prompt."""
+    logger.info(f"⚡ [AI CRON] Executing dynamic job: {job_name}")
+    try:
+        from langchain_core.messages import HumanMessage
+        from app.features.agent.graph import get_agent_graph
+        from app.features.agent.memory import MemoryManager
+        
+        db = get_supabase_client()
+        memory = MemoryManager(db, user_id)
+        session = memory.get_or_create_session()
+        
+        state = {
+            "messages": [HumanMessage(content=prompt)],
+            "user_id": user_id,
+            "user_name": memory.get_user_name(),
+            "user_preferences": memory.get_user_preferences(),
+            "default_location": "Trà Vinh",
+            "conversation_summary": "",
+        }
+        
+        settings = get_settings()
+        graph = get_agent_graph()
+        await graph.ainvoke(state, config={"recursion_limit": settings.AGENT_RECURSION_LIMIT})
+        logger.info(f"✅ [AI CRON] Job {job_name} finished.")
+    except Exception as e:
+        logger.error(f"❌ [AI CRON] Job {job_name} failed: {e}")
+
+def sync_dynamic_jobs():
+    """Quét Database bảng scheduled_prompts và nạp lại vào APScheduler."""
+    try:
+        db = get_supabase_client()
+        res = db.table("scheduled_prompts").select("*").eq("is_active", True).execute()
+        jobs = res.data or []
+        
+        # Xóa các job cũ có tiền tố dynamic_
+        for job in scheduler.get_jobs():
+            if job.id.startswith("dynamic_"):
+                scheduler.remove_job(job.id)
+                
+        # Nạp lại
+        for job in jobs:
+            job_id = f"dynamic_{job['id']}"
+            cron_expr = job["cron_expr"].split()
+            if len(cron_expr) == 5:
+                minute, hour, day, month, day_of_week = cron_expr
+                scheduler.add_job(
+                    func=run_dynamic_prompt_job,
+                    trigger=CronTrigger(minute=minute, hour=hour, day=day, month=month, day_of_week=day_of_week, timezone=VN_TZ),
+                    args=[job["user_id"], job["prompt"], job["name"]],
+                    id=job_id,
+                    replace_existing=True
+                )
+        logger.info(f"🔄 Đã đồng bộ {len(jobs)} Dynamic AI Cronjobs từ Database.")
+    except Exception as e:
+        logger.error(f"Lỗi khi sync_dynamic_jobs: {e}")
+
+# Chạy sync mỗi 5 phút một lần để update thay đổi ở DB
+scheduler.add_job(sync_dynamic_jobs, 'interval', minutes=5, id="sync_dynamic_jobs_task", replace_existing=True)
