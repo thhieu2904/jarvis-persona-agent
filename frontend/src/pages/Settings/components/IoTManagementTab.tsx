@@ -12,6 +12,10 @@ export default function IoTManagementTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 6;
+
   // States Modal Add Device
   const [isAdding, setIsAdding] = useState(false);
   const [newDevice, setNewDevice] = useState<Partial<IoTDeviceCreate>>({
@@ -610,114 +614,127 @@ export default function IoTManagementTab() {
       <div
         style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}
       >
-        {devices.map((dev) => (
-          <div
-            key={dev.id}
-            className={styles.card}
-            style={{ height: "100%", position: "relative" }}
-          >
-            <button
-              onClick={() => handleDelete(dev.id)}
-              style={{
-                position: "absolute",
-                top: "16px",
-                right: "16px",
-                background: "transparent",
-                border: "none",
-                color: "var(--error)",
-                cursor: "pointer",
-              }}
-            >
-              <Trash size={16} />
-            </button>
+        {devices
+          .slice(
+            (currentPage - 1) * ITEMS_PER_PAGE,
+            currentPage * ITEMS_PER_PAGE,
+          )
+          .map((dev) => (
             <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "12px",
-                marginBottom: "16px",
-              }}
+              key={dev.id}
+              className={styles.card}
+              style={{ height: "100%", position: "relative" }}
             >
-              <div
+              <button
+                onClick={() => handleDelete(dev.id)}
                 style={{
-                  background: dev.is_active
-                    ? "rgba(16, 185, 129, 0.1)"
-                    : "rgba(239, 68, 68, 0.1)",
-                  color: dev.is_active ? "#10b981" : "#ef4444",
-                  padding: "12px",
-                  borderRadius: "50%",
+                  position: "absolute",
+                  top: "16px",
+                  right: "16px",
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--error)",
+                  cursor: "pointer",
                 }}
               >
-                <Wifi size={24} />
-              </div>
-              <div>
-                <h3 style={{ margin: 0, fontSize: "16px" }}>{dev.name}</h3>
-                <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                  IP: {dev.ip_address} • v{dev.version}
-                </span>
-              </div>
-            </div>
-
-            <div
-              style={{
-                fontSize: "13px",
-                color: "var(--text-secondary)",
-                background: "var(--bg-secondary)",
-                padding: "12px",
-                borderRadius: "8px",
-              }}
-            >
+                <Trash size={16} />
+              </button>
               <div
                 style={{
                   display: "flex",
-                  justifyContent: "space-between",
-                  marginBottom: "4px",
+                  alignItems: "center",
+                  gap: "12px",
+                  marginBottom: "16px",
                 }}
               >
-                <span>
-                  Loại:{" "}
-                  <b>
-                    {dev.device_type === "single" ? "Ổ cắm đơn" : "Ổ đa năng"}
-                  </b>
-                </span>
-                <span>ID: {dev.device_id.substring(0, 6)}...</span>
+                <div
+                  style={{
+                    background: dev.is_active
+                      ? "rgba(16, 185, 129, 0.1)"
+                      : "rgba(239, 68, 68, 0.1)",
+                    color: dev.is_active ? "#10b981" : "#ef4444",
+                    padding: "12px",
+                    borderRadius: "50%",
+                  }}
+                >
+                  <Wifi size={24} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "16px" }}>{dev.name}</h3>
+                  <span
+                    style={{ fontSize: "12px", color: "var(--text-muted)" }}
+                  >
+                    IP: {dev.ip_address} • v{dev.version}
+                  </span>
+                </div>
               </div>
 
-              {dev.device_type === "multi" &&
-                dev.dps_mapping &&
-                Object.keys(dev.dps_mapping).length > 0 && (
-                  <div
-                    style={{
-                      marginTop: "12px",
-                      borderTop: "1px solid var(--border-light)",
-                      paddingTop: "8px",
-                    }}
-                  >
-                    <div style={{ fontWeight: 500, marginBottom: "4px" }}>
-                      Ports (DPS):
-                    </div>
+              <div
+                style={{
+                  fontSize: "13px",
+                  color: "var(--text-secondary)",
+                  background: "var(--bg-secondary)",
+                  padding: "12px",
+                  borderRadius: "8px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    marginBottom: "4px",
+                  }}
+                >
+                  <span>
+                    Loại:{" "}
+                    <b>
+                      {dev.device_type === "single" ? "Ổ cắm đơn" : "Ổ đa năng"}
+                    </b>
+                  </span>
+                  <span>ID: {dev.device_id.substring(0, 6)}...</span>
+                </div>
+
+                {dev.device_type === "multi" &&
+                  dev.dps_mapping &&
+                  Object.keys(dev.dps_mapping).length > 0 && (
                     <div
-                      style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}
+                      style={{
+                        marginTop: "12px",
+                        borderTop: "1px solid var(--border-light)",
+                        paddingTop: "8px",
+                      }}
                     >
-                      {Object.values(dev.dps_mapping).map((label: any, idx) => (
-                        <span
-                          key={idx}
-                          style={{
-                            background: "rgba(0,0,0,0.05)",
-                            padding: "2px 8px",
-                            borderRadius: "12px",
-                            border: "1px solid rgba(0,0,0,0.1)",
-                          }}
-                        >
-                          {label}
-                        </span>
-                      ))}
+                      <div style={{ fontWeight: 500, marginBottom: "4px" }}>
+                        Ports (DPS):
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "8px",
+                        }}
+                      >
+                        {Object.values(dev.dps_mapping).map(
+                          (label: any, idx) => (
+                            <span
+                              key={idx}
+                              style={{
+                                background: "rgba(0,0,0,0.05)",
+                                padding: "2px 8px",
+                                borderRadius: "12px",
+                                border: "1px solid rgba(0,0,0,0.1)",
+                              }}
+                            >
+                              {label}
+                            </span>
+                          ),
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
         {devices.length === 0 && !isAdding && (
           <div
             style={{
@@ -733,6 +750,67 @@ export default function IoTManagementTab() {
           </div>
         )}
       </div>
+
+      {/* Pagination Controls */}
+      {devices.length > ITEMS_PER_PAGE && (
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            gap: "16px",
+            marginTop: "24px",
+            paddingTop: "16px",
+            borderTop: "1px solid var(--border-light)",
+          }}
+        >
+          <button
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            style={{
+              background: "var(--bg-secondary)",
+              border: "1px solid var(--border-light)",
+              padding: "6px 12px",
+              borderRadius: "6px",
+              cursor: currentPage === 1 ? "not-allowed" : "pointer",
+              opacity: currentPage === 1 ? 0.5 : 1,
+              color: "var(--text-primary)",
+            }}
+          >
+            Trang trước
+          </button>
+          <span style={{ fontSize: "14px", color: "var(--text-muted)" }}>
+            Trang {currentPage} / {Math.ceil(devices.length / ITEMS_PER_PAGE)}
+          </span>
+          <button
+            onClick={() =>
+              setCurrentPage((p) =>
+                Math.min(Math.ceil(devices.length / ITEMS_PER_PAGE), p + 1),
+              )
+            }
+            disabled={
+              currentPage === Math.ceil(devices.length / ITEMS_PER_PAGE)
+            }
+            style={{
+              background: "var(--bg-secondary)",
+              border: "1px solid var(--border-light)",
+              padding: "6px 12px",
+              borderRadius: "6px",
+              cursor:
+                currentPage === Math.ceil(devices.length / ITEMS_PER_PAGE)
+                  ? "not-allowed"
+                  : "pointer",
+              opacity:
+                currentPage === Math.ceil(devices.length / ITEMS_PER_PAGE)
+                  ? 0.5
+                  : 1,
+              color: "var(--text-primary)",
+            }}
+          >
+            Trang sau
+          </button>
+        </div>
+      )}
     </div>
   );
 }
