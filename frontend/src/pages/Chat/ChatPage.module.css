@@ -1145,6 +1145,129 @@
   }
 }
 
+/* ── Routine Widget ──────────────────────────────────────── */
+.routineWidget {
+  background: linear-gradient(
+    135deg,
+    rgba(139, 92, 246, 0.08),
+    rgba(59, 130, 246, 0.06)
+  );
+  border: 1px solid rgba(139, 92, 246, 0.15);
+}
+
+.routineList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.routineItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+
+.routineItem:hover {
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+.routineInfo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.routineLabel {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.routineActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.routineTimePicker {
+  background: var(--bg-input);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  padding: 4px 6px;
+  width: 100px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.routineTimePicker:focus {
+  border-color: var(--blue-500);
+}
+
+.routineTimePicker::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
+  cursor: pointer;
+}
+
+.routineRemoveBtn {
+  width: 22px;
+  height: 22px;
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--red);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  padding: 0;
+}
+
+.routineRemoveBtn:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+.routineRemoveBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.routineEnableBtn {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--blue-400);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 4px 12px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.routineEnableBtn:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.25);
+}
+
+.routineEnableBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.routineHint {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: var(--space-sm);
+}
+
 .spinning {
   animation: spin 1s linear infinite;
 }
