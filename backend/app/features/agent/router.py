@@ -306,6 +306,81 @@ async def delete_session(
     return {"message": "Cuộc trò chuyện đã được xóa"}
 
 
+class RoutineScheduleRequest(BaseModel):
+    routine_type: str  # "morning" or "evening"
+    time: str | None = None  # "HH:MM" format or null to disable
+
+
+@router.put("/routine_schedule")
+async def update_routine_schedule(
+    data: RoutineScheduleRequest,
+    user_id: str = Depends(get_current_user_id),
+    db: Client = Depends(get_db),
+):
+    """Update routine schedule (morning/evening briefing time).
+
+    Set time to null to disable a routine.
+    """
+    from app.background.scheduler import update_routine_schedule as update_schedule
+
+    if data.routine_type not in ("morning", "evening"):
+        raise HTTPException(status_code=400, detail="routine_type phải là 'morning' hoặc 'evening'")
+
+    # Validate time format if provided
+    if data.time:
+        try:
+            h, m = map(int, data.time.split(":"))
+            if not (0 <= h <= 23 and 0 <= m <= 59):
+                raise ValueError
+        except (ValueError, AttributeError):
+            raise HTTPException(status_code=400, detail="Định dạng giờ phải là HH:MM (vd: 06:30)")
+
+    # Update preferences in DB
+    pref_key = f"{data.routine_type}_routine_time"
+    result = (
+        db.table("users")
+        .select("preferences")
+        .eq("id", user_id)
+        .single()
+        .execute()
+    )
+    prefs = result.data.get("preferences", {}) if result.data else {}
+    if data.time:
+        prefs[pref_key] = data.time
+    else:
+        prefs.pop(pref_key, None)
+
+    db.table("users").update({"preferences": prefs}).eq("id", user_id).execute()
+
+    # Sync APScheduler in-memory job
+    job_id = f"{data.routine_type}_routine_job"
+    update_schedule(job_id, data.time)
+
+    return {
+        "message": f"{'Đã đặt' if data.time else 'Đã tắt'} báo cáo {data.routine_type} {'lúc ' + data.time if data.time else ''}",
+        "routine_type": data.routine_type,
+        "time": data.time,
+    }
+
+
+@router.get("/routine_schedule")
+async def get_routine_schedule(
+    user_id: str = Depends(get_current_user_id),
+    db: Client = Depends(get_db),
+):
+    """Get current routine schedule settings."""
+    result = (
+        db.table("users")
+        .select("preferences")
+        .eq("id", user_id)
+        .single()
+        .execute()
+    )
+    prefs = result.data.get("preferences", {}) if result.data else {}
+    return {
+        "morning_routine_time": prefs.get("morning_routine_time"),
+        "evening_routine_time": prefs.get("evening_routine_time"),
+    }
 _weather_cache = {}
 
 @router.get("/weather")

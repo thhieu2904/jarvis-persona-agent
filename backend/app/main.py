@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.core.exceptions import AppBaseError
+from app.background.scheduler import init_scheduler, shutdown_scheduler
 
 # ── Feature Routers ──────────────────────────────────────
 from app.features.auth.router import router as auth_router
@@ -33,7 +34,18 @@ async def lifespan(app: FastAPI):
     print(f"🚀 {settings.APP_NAME} v{settings.APP_VERSION} starting...")
     print(f"🤖 LLM Provider: {settings.LLM_PROVIDER} ({settings.LLM_MODEL})")
     print(f"🔗 Supabase: {settings.SUPABASE_URL[:40]}...")
+
+    # Start background scheduler for proactive routines
+    try:
+        init_scheduler()
+        print("📅 Background scheduler initialized.")
+    except Exception as e:
+        print(f"⚠️ Scheduler init failed (non-critical): {e}")
+
     yield
+
+    # Graceful shutdown
+    shutdown_scheduler()
     print("👋 Shutting down...")
 
 
