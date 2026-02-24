@@ -100,7 +100,8 @@ SUMMARY_PROMPT = """Tóm tắt đoạn hội thoại sau thành 2-3 câu ngắn 
 Giữ lại các thông tin quan trọng: yêu cầu của user, kết quả tool call, quyết định đã đưa ra.
 Bỏ qua lời chào, câu hỏi xã giao.
 
-Hội thoại:
+{existing_summary_context}
+Hội thoại mới:
 {messages}
 
-Tóm tắt:"""
+Tóm tắt gộp:"""

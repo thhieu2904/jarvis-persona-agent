@@ -62,6 +62,23 @@ class MemoryManager:
         if not old_messages:
             return None
 
+        # Lấy summary hiện tại từ DB (nếu có)
+        try:
+            session_data = (
+                self.db.table("conversation_sessions")
+                .select("summary")
+                .eq("id", session_id)
+                .single()
+                .execute()
+            )
+            existing_summary = session_data.data.get("summary") if session_data.data else None
+        except Exception:
+            existing_summary = None
+
+        existing_summary_context = ""
+        if existing_summary:
+            existing_summary_context = f"Tóm tắt trước đó:\n{existing_summary}\n"
+
         # Format messages for summary prompt
         formatted = "\n".join(
             f"{'User' if isinstance(m, HumanMessage) else 'AI'}: {m.content}"
@@ -72,7 +89,10 @@ class MemoryManager:
         # Call LLM to summarize
         llm = create_llm()
         summary_response = await llm.ainvoke(
-            SUMMARY_PROMPT.format(messages=formatted)
+            SUMMARY_PROMPT.format(
+                existing_summary_context=existing_summary_context,
+                messages=formatted
+            )
         )
         summary = summary_response.content
 
