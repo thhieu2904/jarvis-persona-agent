@@ -21,8 +21,19 @@ Khác với điều khiển qua Cloud, điều khiển qua LAN bắt buộc ph�
    ```bash
    python -m tinytuya wizard
    ```
-4. Điền `API Key`, `API Secret`, `Device ID` (có thể xem trong phần Device Information trên app điện thoại).
-5. Wizard sẽ tải xuống toàn bộ `Local Key` của tất cả các thiết bị trong nhà bạn và lưu thành file `devices.json`. Bạn mở file này ra lấy ID, IP, và Key tương ứng.
+4. Điền `Access ID/Client ID` (vào ô API Key), `Access Secret/Client Secret` (vào ô API Secret), `Device ID` (có thể xem trong phần Device Information trên app điện thoại).
+5. Wizard sẽ tải xuống toàn bộ `Local Key` của tất cả các thiết bị trong nhà bạn và lưu thành file `devices.json`. Bạn mở file này ra lấy `id` và `key` tương ứng.
+   _Ví dụ cấu trúc file trả về:_
+   ```json
+   [
+     {
+       "name": "Ổ cắm Ralli OC.09",
+       "id": "a360xxxxxxxxxxxxna",
+       "key": "Z$Nkxxxxxxx$Yt",
+       "mac": "c4:82:ex:xx:xx:xx"
+     }
+   ]
+   ```
 
 ### Cách 2: Sử dụng Auto-Discovery (Đã tích hợp trên Web)
 

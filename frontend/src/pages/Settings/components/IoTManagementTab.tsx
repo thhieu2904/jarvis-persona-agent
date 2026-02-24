@@ -1,5 +1,5 @@
 import { useState, useEffect, type FormEvent } from "react";
-import { Plus, Trash, Wifi, X, Radar, Check } from "lucide-react";
+import { Plus, Trash, Wifi, X, Radar, Check, Info } from "lucide-react";
 import {
   iotService,
   type IoTDevice,
@@ -11,6 +11,9 @@ export default function IoTManagementTab() {
   const [devices, setDevices] = useState<IoTDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Guide State
+  const [showGuide, setShowGuide] = useState(false);
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -177,8 +180,32 @@ export default function IoTManagementTab() {
           marginBottom: "1rem",
         }}
       >
-        <h2 className={styles.pageTitle} style={{ margin: 0 }}>
+        <h2
+          className={styles.pageTitle}
+          style={{
+            margin: 0,
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+          }}
+        >
           Quản lý Smart Home
+          <button
+            onClick={() => setShowGuide(!showGuide)}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              display: "flex",
+              padding: "4px",
+              borderRadius: "50%",
+              transition: "all 0.2s",
+            }}
+            title="Hướng dẫn lấy thông số Tuya"
+          >
+            <Info size={18} />
+          </button>
         </h2>
         <button
           className={styles.saveBtn}
@@ -188,6 +215,112 @@ export default function IoTManagementTab() {
           <Plus size={16} /> Thêm thiết bị mới
         </button>
       </div>
+
+      {showGuide && (
+        <div
+          style={{
+            marginBottom: "20px",
+            background: "rgba(59, 130, 246, 0.1)",
+            border: "1px solid rgba(59, 130, 246, 0.3)",
+            borderRadius: "8px",
+            padding: "16px",
+            position: "relative",
+          }}
+        >
+          <button
+            onClick={() => setShowGuide(false)}
+            style={{
+              position: "absolute",
+              top: "12px",
+              right: "12px",
+              background: "transparent",
+              border: "none",
+              color: "var(--text-muted)",
+              cursor: "pointer",
+            }}
+          >
+            <X size={16} />
+          </button>
+          <h4
+            style={{
+              margin: "0 0 12px 0",
+              color: "var(--blue-500)",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}
+          >
+            <Info size={18} /> Hướng dẫn lấy thông số Tuya
+          </h4>
+          <ol
+            style={{
+              margin: 0,
+              paddingLeft: "20px",
+              fontSize: "14px",
+              color: "var(--text-primary)",
+              lineHeight: "1.6",
+            }}
+          >
+            <li>
+              Tải app SmartLife/Tuya, kết nối các ổ cắm vào cùng chung mạng WiFi
+              với máy chủ này.
+            </li>
+            <li>
+              Đăng ký tài khoản Developer trên{" "}
+              <a
+                href="https://iot.tuya.com/"
+                target="_blank"
+                rel="noreferrer"
+                style={{ color: "var(--blue-500)" }}
+              >
+                iot.tuya.com
+              </a>
+              , tạo 1 Cloud Project và liên kết App SmartLife vào Project đó.
+            </li>
+            <li>
+              Tại máy tính, mở Terminal và chạy lệnh:{" "}
+              <code
+                style={{
+                  background: "var(--bg-primary)",
+                  padding: "2px 6px",
+                  borderRadius: "4px",
+                }}
+              >
+                python -m tinytuya wizard
+              </code>
+              . Nhập <strong>Access ID/Client ID</strong> (vào ô API Key) và{" "}
+              <strong>Access Secret/Client Secret</strong> (vào ô API Secret)
+              khi được hỏi.
+            </li>
+            <li>
+              Wizard sẽ quét toàn bộ thiết bị và tải xuống file{" "}
+              <code
+                style={{
+                  background: "var(--bg-primary)",
+                  padding: "2px 6px",
+                  borderRadius: "4px",
+                }}
+              >
+                devices.json
+              </code>
+              . Mở file này ra để lấy chính xác <strong>Device ID</strong> và{" "}
+              <strong>Local Key</strong> của từng thiết bị.
+            </li>
+          </ol>
+          <div
+            style={{
+              marginTop: "12px",
+              fontSize: "13px",
+              color: "var(--text-muted)",
+              fontStyle: "italic",
+            }}
+          >
+            Mẹo: Bạn không cần nhập tay IP. Hãy bấm{" "}
+            <strong>Thêm thiết bị mới -&gt; Quét Radar Tự Động</strong> để quét
+            IP cục bộ nhanh nhất.
+          </div>
+        </div>
+      )}
 
       {error && <div className={styles.error}>{error}</div>}
 

@@ -2,6 +2,7 @@
 plans/
 script/
 SourceThamKhao/
+notes_prod/
 
 # ── Python ───────────────────────────────────────────────────────
 __pycache__/
