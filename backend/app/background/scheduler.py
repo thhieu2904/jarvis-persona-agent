@@ -95,16 +95,29 @@ async def _execute_routine(routine_type: str):
         logger.info(f"{routine_type} routine disabled in preferences, skipping.")
         return
 
-    prompt = MORNING_PROMPT if routine_type == "morning" else EVENING_PROMPT
-
     try:
         # Import here to avoid circular imports
         from langchain_core.messages import HumanMessage
         from app.features.agent.graph import get_agent_graph
         from app.features.agent.memory import MemoryManager
+        from datetime import datetime
 
         db = get_supabase_client()
         memory = MemoryManager(db, user_id)
+
+        # 1. Thu thập Context
+        today_date = datetime.now(VN_TZ).strftime("%d/%m/%Y")
+        default_location, _ = memory.get_weather_prefs()
+        user_location = default_location or "Trà Vinh"
+
+        # 2. Get custom prompt or fallback
+        raw_prompt = prefs.get(f"{routine_type}_routine_prompt")
+        if not raw_prompt or not str(raw_prompt).strip():
+            raw_prompt = MORNING_PROMPT if routine_type == "morning" else EVENING_PROMPT
+
+        # 3. Interpolation
+        final_prompt = raw_prompt.replace("{{current_date}}", today_date)
+        final_prompt = final_prompt.replace("{{location}}", user_location)
 
         # Create a dedicated session for the routine
         session = memory.get_or_create_session()
@@ -112,10 +125,11 @@ async def _execute_routine(routine_type: str):
 
         # Build state for the agent
         state = {
-            "messages": [HumanMessage(content=prompt)],
+            "messages": [HumanMessage(content=final_prompt)],
             "user_id": user_id,
             "user_name": memory.get_user_name(),
             "user_preferences": memory.get_user_preferences(),
+            "default_location": default_location,
             "conversation_summary": "",
         }
 

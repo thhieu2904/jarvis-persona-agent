@@ -309,6 +309,7 @@ async def delete_session(
 class RoutineScheduleRequest(BaseModel):
     routine_type: str  # "morning" or "evening"
     time: str | None = None  # "HH:MM" format or null to disable
+    prompt: str | None = None  # Custom routine prompt
 
 
 @router.put("/routine_schedule")
@@ -336,7 +337,8 @@ async def update_routine_schedule(
             raise HTTPException(status_code=400, detail="Định dạng giờ phải là HH:MM (vd: 06:30)")
 
     # Update preferences in DB
-    pref_key = f"{data.routine_type}_routine_time"
+    pref_key_time = f"{data.routine_type}_routine_time"
+    pref_key_prompt = f"{data.routine_type}_routine_prompt"
     result = (
         db.table("users")
         .select("preferences")
@@ -345,10 +347,14 @@ async def update_routine_schedule(
         .execute()
     )
     prefs = result.data.get("preferences", {}) if result.data else {}
-    if data.time:
-        prefs[pref_key] = data.time
+    
+    if data.time is not None:
+        prefs[pref_key_time] = data.time
     else:
-        prefs.pop(pref_key, None)
+        prefs.pop(pref_key_time, None)
+        
+    if data.prompt is not None:
+        prefs[pref_key_prompt] = data.prompt
 
     db.table("users").update({"preferences": prefs}).eq("id", user_id).execute()
 
@@ -362,6 +368,17 @@ async def update_routine_schedule(
         "time": data.time,
     }
 
+
+@router.get("/available_tools")
+async def get_available_tools():
+    """Get list of available tools to be used in routine custom prompts."""
+    return [
+        {"id": "weather", "label": "🌤️ Thời tiết", "text": "[Xem thời tiết tại {{location}}]"},
+        {"id": "timetable", "label": "📅 Lịch học", "text": "[Đọc lịch học ngày {{current_date}}]"},
+        {"id": "tasks", "label": "✅ Công việc", "text": "[Rà soát các task đến hạn/quá hạn]"},
+        {"id": "news", "label": "📰 Tin tức", "text": "[Tìm 3 tin tức nổi bật hôm nay]"},
+        {"id": "greeting", "label": "💖 Lời chúc", "text": "[Viết một lời chúc tạo động lực]"}
+    ]
 
 @router.get("/routine_schedule")
 async def get_routine_schedule(
@@ -380,6 +397,8 @@ async def get_routine_schedule(
     return {
         "morning_routine_time": prefs.get("morning_routine_time"),
         "evening_routine_time": prefs.get("evening_routine_time"),
+        "morning_routine_prompt": prefs.get("morning_routine_prompt"),
+        "evening_routine_prompt": prefs.get("evening_routine_prompt"),
     }
 _weather_cache = {}
 
