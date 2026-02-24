@@ -54,6 +54,7 @@ export default function ChatPage() {
   } = useChatStore();
 
   const [input, setInput] = useState("");
+  const [interimInput, setInterimInput] = useState("");
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [isListening, setIsListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(true);
@@ -69,13 +70,14 @@ export default function ChatPage() {
     if (silenceTimeoutRef.current) {
       clearTimeout(silenceTimeoutRef.current);
     }
-    // Auto stop if silence for 5 seconds
+    // Auto stop if silence for 3 seconds
     silenceTimeoutRef.current = setTimeout(() => {
       if (recognitionRef.current && isListening) {
         recognitionRef.current.stop();
         setIsListening(false);
+        setInterimInput(""); // Clear interim on stop
       }
-    }, 5000);
+    }, 3000);
   }, [isListening]);
 
   useEffect(() => {
@@ -91,18 +93,25 @@ export default function ChatPage() {
 
       recognition.onresult = (event: any) => {
         let finalTranscript = "";
+        let currentInterim = "";
+
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           if (event.results[i].isFinal) {
             finalTranscript += event.results[i][0].transcript;
+          } else {
+            currentInterim += event.results[i][0].transcript;
           }
         }
+
+        setInterimInput(currentInterim);
+
         if (finalTranscript) {
           setInput((prev) => {
             const separator = prev && !prev.endsWith(" ") ? " " : "";
             return prev + separator + finalTranscript;
           });
-          resetSilenceTimeout();
         }
+        resetSilenceTimeout();
       };
 
       recognition.onerror = (event: any) => {
@@ -114,11 +123,13 @@ export default function ChatPage() {
         }
         if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
         setIsListening(false);
+        setInterimInput("");
       };
 
       recognition.onend = () => {
         if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
         setIsListening(false);
+        setInterimInput("");
       };
 
       recognitionRef.current = recognition;
@@ -152,11 +163,15 @@ export default function ChatPage() {
   }, [input]);
 
   const handleSend = () => {
-    const msg = input.trim();
+    // If we have an interim input but no final input, just clear it mostly or append
+    const textToSend =
+      input.trim() + (interimInput ? " " + interimInput.trim() : "");
+    const msg = textToSend.trim();
     if ((!msg && selectedImages.length === 0) || isSending) return;
     const imagesToSend =
       selectedImages.length > 0 ? [...selectedImages] : undefined;
     setInput("");
+    setInterimInput("");
     setSelectedImages([]);
     sendMessage(msg || "Phân tích ảnh này giúp mình", imagesToSend);
   };
@@ -170,6 +185,7 @@ export default function ChatPage() {
 
   const handleSuggestion = (text: string) => {
     setInput("");
+    setInterimInput("");
     setSelectedImages([]);
     sendMessage(text);
   };
@@ -198,6 +214,7 @@ export default function ChatPage() {
       if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
       recognitionRef.current.stop();
       setIsListening(false);
+      setInterimInput("");
     } else {
       try {
         recognitionRef.current.start();
@@ -427,7 +444,10 @@ export default function ChatPage() {
                 ref={textareaRef}
                 className={styles.inputField}
                 placeholder="Nhập tin nhắn... (Shift+Enter để xuống dòng)"
-                value={input}
+                value={
+                  input +
+                  (interimInput ? (input ? " " : "") + interimInput : "")
+                }
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 rows={1}
