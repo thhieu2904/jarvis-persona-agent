@@ -5,7 +5,10 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import LoginPage from "./pages/Login/LoginPage";
 import RegisterPage from "./pages/Register/RegisterPage";
 import ChatPage from "./pages/Chat/ChatPage";
-import SettingsPage from "./pages/Settings/SettingsPage";
+import SettingsLayout from "./pages/Settings/SettingsLayout";
+import ProfileSettingsPage from "./pages/Settings/ProfileSettingsPage";
+import IoTManagementTab from "./pages/Settings/components/IoTManagementTab";
+import SchedulerSettingsPage from "./pages/Settings/SchedulerSettingsPage";
 
 export default function App() {
   const { loadFromStorage, token } = useAuthStore();
@@ -36,14 +39,21 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+
+        {/* Settings — nested routes */}
         <Route
           path="/settings"
           element={
             <ProtectedRoute>
-              <SettingsPage />
+              <SettingsLayout />
             </ProtectedRoute>
           }
-        />
+        >
+          <Route index element={<Navigate to="profile" replace />} />
+          <Route path="profile" element={<ProfileSettingsPage />} />
+          <Route path="iot" element={<IoTManagementTab />} />
+          <Route path="scheduler" element={<SchedulerSettingsPage />} />
+        </Route>
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import {
   Bot,
   Plus,
@@ -13,6 +12,7 @@ import {
 import styles from "../ChatPage.module.css";
 import { useAuthStore } from "../../../stores/authStore";
 import { useChatStore } from "../../../stores/chatStore";
+import SettingsMenu from "../../../components/SettingsMenu/SettingsMenu";
 
 function getInitials(name: string): string {
   return name
@@ -66,6 +66,7 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
 
   const sessionGroups = groupSessionsByDate(sessions);
 
@@ -160,11 +161,19 @@ export default function Sidebar() {
       </div>
 
       <div className={styles.sidebarFooter}>
-        <Link to="/settings" className={styles.userInfo}>
-          <div
-            className={styles.userAvatar}
-            title={collapsed ? "Cài đặt" : undefined}
-          >
+        <button
+          className={styles.userInfo}
+          onClick={() => setShowSettingsMenu(true)}
+          title={collapsed ? "Cài đặt" : undefined}
+          style={{
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            width: "100%",
+            textAlign: "left",
+          }}
+        >
+          <div className={styles.userAvatar}>
             {user ? getInitials(user.full_name) : "?"}
           </div>
           <div>
@@ -181,8 +190,12 @@ export default function Sidebar() {
               Cài đặt
             </div>
           </div>
-        </Link>
+        </button>
       </div>
+
+      {showSettingsMenu && (
+        <SettingsMenu onClose={() => setShowSettingsMenu(false)} />
+      )}
 
       {/* Delete Confirmation Modal */}
       {sessionToDelete && (

@@ -1,16 +1,12 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
 import {
-  ArrowLeft,
   GraduationCap,
-  LogOut,
   Settings as SettingsIcon,
   Eye,
   EyeOff,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { authService } from "../../services/auth.service";
-import IoTManagementTab from "./components/IoTManagementTab";
 import styles from "./SettingsPage.module.css";
 
 function getInitials(name: string): string {
@@ -23,116 +19,52 @@ function getInitials(name: string): string {
     .toUpperCase();
 }
 
-export default function SettingsPage() {
-  const { user, logout } = useAuthStore();
-  const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<"profile" | "iot" | "scheduler">(
-    "profile",
-  );
-
-  const handleLogout = () => {
-    logout();
-    navigate("/login");
-  };
+export default function ProfileSettingsPage() {
+  const { user } = useAuthStore();
 
   const joinDate = user?.created_at
     ? new Date(user.created_at).toLocaleDateString("vi-VN")
     : "Gần đây";
 
   return (
-    <div className={styles.settingsPage}>
-      <header className={styles.header}>
-        <Link to="/" className={styles.backLink}>
-          <ArrowLeft size={16} />
-          Quay lại chat
-        </Link>
-        <button className={styles.logoutBtn} onClick={handleLogout}>
-          <LogOut size={14} style={{ display: "inline", verticalAlign: -2 }} />
-          Đăng xuất
-        </button>
-      </header>
+    <>
+      <h1 className={styles.pageTitle}>Hồ sơ & Dữ liệu</h1>
 
-      <div className={styles.content}>
-        <div className={styles.tabsContainer}>
-          <button
-            className={`${styles.tabButton} ${activeTab === "profile" ? styles.activeTab : ""}`}
-            onClick={() => setActiveTab("profile")}
-          >
-            Hồ sơ & Dữ liệu
-          </button>
-          <button
-            className={`${styles.tabButton} ${activeTab === "iot" ? styles.activeTab : ""}`}
-            onClick={() => setActiveTab("iot")}
-          >
-            Nhà thông minh (IoT)
-          </button>
-          {/* Sẵn khung cho tab sau */}
-          <button
-            className={`${styles.tabButton} ${activeTab === "scheduler" ? styles.activeTab : ""}`}
-            onClick={() => setActiveTab("scheduler")}
-          >
-            Lịch trình & Lối sống
-          </button>
+      <div className={styles.dashboardGrid}>
+        {/* ── Left Column: Personal Info ─────────────────────── */}
+        <div>
+          <div className={styles.card}>
+            <div className={styles.avatarSection}>
+              <div className={styles.avatarCircle}>
+                {user?.avatar_url ? (
+                  <img
+                    src={user.avatar_url}
+                    alt="Avatar"
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      borderRadius: "50%",
+                      objectFit: "cover",
+                    }}
+                  />
+                ) : (
+                  getInitials(user?.full_name || "?")
+                )}
+              </div>
+              <div className={styles.userName}>{user?.full_name}</div>
+              <div className={styles.userTenure}>Tham gia từ {joinDate}</div>
+            </div>
+            <ProfileForm />
+          </div>
         </div>
 
-        {activeTab === "profile" && (
-          <>
-            <h1 className={styles.pageTitle}>Tổng quan tài khoản</h1>
-
-            <div className={styles.dashboardGrid}>
-              {/* ── Left Column: Personal Info ─────────────────────── */}
-              <div>
-                <div className={styles.card}>
-                  <div className={styles.avatarSection}>
-                    <div className={styles.avatarCircle}>
-                      {user?.avatar_url ? (
-                        <img
-                          src={user.avatar_url}
-                          alt="Avatar"
-                          style={{
-                            width: "100%",
-                            height: "100%",
-                            borderRadius: "50%",
-                            objectFit: "cover",
-                          }}
-                        />
-                      ) : (
-                        getInitials(user?.full_name || "?")
-                      )}
-                    </div>
-                    <div className={styles.userName}>{user?.full_name}</div>
-                    <div className={styles.userTenure}>
-                      Tham gia từ {joinDate}
-                    </div>
-                  </div>
-                  <ProfileForm />
-                </div>
-              </div>
-
-              {/* ── Right Column ───────────────────────────────────── */}
-              <div>
-                {/* School & Sync */}
-                <SchoolForm />
-
-                {/* System Settings */}
-                <SystemConfig />
-              </div>
-            </div>
-          </>
-        )}
-
-        {activeTab === "iot" && <IoTManagementTab />}
-
-        {activeTab === "scheduler" && (
-          <div
-            className={styles.card}
-            style={{ textAlign: "center", padding: "40px" }}
-          >
-            Tính năng cấu hình Lối sống AI và Thói quen đang được phát triển...
-          </div>
-        )}
+        {/* ── Right Column ───────────────────────────────────── */}
+        <div>
+          <SchoolForm />
+          <SystemConfig />
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -313,22 +245,11 @@ function SchoolForm() {
 }
 
 function SystemConfig() {
-  const { user, updateAgentConfig, updatePreferences } = useAuthStore();
+  const { user, updateAgentConfig } = useAuthStore();
   const [updating, setUpdating] = useState(false);
 
   const currentVerbosity =
     (user?.agent_config?.response_detail as string) || "Đầy đủ (Chi tiết)";
-
-  // Weather preferences state
-  const prefs = (user?.preferences || {}) as Record<string, unknown>;
-  const [defaultLoc, setDefaultLoc] = useState(
-    (prefs.default_location as string) || "",
-  );
-  const [cacheTtl, setCacheTtl] = useState(
-    String((prefs.weather_cache_ttl as number) || 1800),
-  );
-  const [weatherSaving, setWeatherSaving] = useState(false);
-  const [weatherSuccess, setWeatherSuccess] = useState("");
 
   const handleVerbosityChange = async (
     e: React.ChangeEvent<HTMLSelectElement>,
@@ -344,29 +265,6 @@ function SystemConfig() {
       setUpdating(false);
     }
   };
-
-  const handleSaveWeather = async () => {
-    setWeatherSaving(true);
-    setWeatherSuccess("");
-    try {
-      await updatePreferences({
-        ...prefs,
-        default_location: defaultLoc || undefined,
-        weather_cache_ttl: parseInt(cacheTtl, 10) || 1800,
-      });
-      setWeatherSuccess("Đã lưu cấu hình thời tiết!");
-      setTimeout(() => setWeatherSuccess(""), 3000);
-    } finally {
-      setWeatherSaving(false);
-    }
-  };
-
-  const ttlOptions = [
-    { label: "15 phút", value: "900" },
-    { label: "30 phút", value: "1800" },
-    { label: "1 giờ", value: "3600" },
-    { label: "2 giờ", value: "7200" },
-  ];
 
   return (
     <div className={styles.card}>
@@ -426,68 +324,6 @@ function SystemConfig() {
           <option value="Đầy đủ (Chi tiết)">Đầy đủ (Chi tiết)</option>
           <option value="Ngắn gọn (Tóm tắt)">Ngắn gọn (Tóm tắt)</option>
         </select>
-      </div>
-
-      {/* ── Weather Settings ───────────────────────────────── */}
-      <div
-        style={{
-          borderTop: "1px solid var(--border-light)",
-          margin: "16px 0",
-          paddingTop: "16px",
-        }}
-      >
-        <div className={styles.toggleLabel} style={{ marginBottom: 8 }}>
-          ☁️ Cấu hình thời tiết
-        </div>
-        <div className={styles.toggleDesc} style={{ marginBottom: 12 }}>
-          Thiết lập vị trí mặc định và thời gian làm mới cho Widget thời tiết &
-          AI Agent.
-        </div>
-
-        {weatherSuccess && (
-          <div className={styles.success} style={{ marginBottom: 8 }}>
-            ✅ {weatherSuccess}
-          </div>
-        )}
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "12px",
-            alignItems: "start",
-          }}
-        >
-          <div className={styles.field} style={{ marginBottom: 0 }}>
-            <label>Vị trí mặc định</label>
-            <input
-              placeholder="VD: Trà Vinh, Hà Nội"
-              value={defaultLoc}
-              onChange={(e) => setDefaultLoc(e.target.value)}
-            />
-          </div>
-          <div className={styles.field} style={{ marginBottom: 0 }}>
-            <label>Thời gian làm mới</label>
-            <select
-              value={cacheTtl}
-              onChange={(e) => setCacheTtl(e.target.value)}
-            >
-              {ttlOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <button
-          className={styles.saveBtn}
-          onClick={handleSaveWeather}
-          disabled={weatherSaving}
-          style={{ marginTop: 18 }}
-        >
-          {weatherSaving ? "Đang lưu..." : "Lưu cấu hình"}
-        </button>
       </div>
     </div>
   );
