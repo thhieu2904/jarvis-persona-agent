@@ -1,20 +1,15 @@
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   GraduationCap,
   LogOut,
-  FileText,
-  StickyNote,
-  CheckSquare,
   Settings as SettingsIcon,
   Eye,
   EyeOff,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { authService } from "../../services/auth.service";
-import { tasksService } from "../../services/tasks.service";
-import { notesService } from "../../services/notes.service";
 import IoTManagementTab from "./components/IoTManagementTab";
 import styles from "./SettingsPage.module.css";
 
@@ -31,25 +26,9 @@ function getInitials(name: string): string {
 export default function SettingsPage() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
-  const [stats, setStats] = useState({ docs: 0, notes: 0, tasks: 0 });
   const [activeTab, setActiveTab] = useState<"profile" | "iot" | "scheduler">(
     "profile",
   );
-
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const [notesRes, tasksRes] = await Promise.all([
-          notesService.listNotes(),
-          tasksService.listTasks("pending"), // Shows pending tasks count
-        ]);
-        setStats({ docs: 0, notes: notesRes.length, tasks: tasksRes.length });
-      } catch (err) {
-        console.error("Failed to fetch user stats", err);
-      }
-    };
-    fetchStats();
-  }, []);
 
   const handleLogout = () => {
     logout();
@@ -132,31 +111,6 @@ export default function SettingsPage() {
 
               {/* ── Right Column ───────────────────────────────────── */}
               <div>
-                {/* Stat Cards */}
-                <div className={styles.statsRow}>
-                  <div className={styles.statCard}>
-                    <div className={styles.statLabel}>
-                      <FileText size={14} className={styles.cardIcon} /> Tài
-                      liệu RAG
-                    </div>
-                    <div className={styles.statValue}>{stats.docs}</div>
-                  </div>
-                  <div className={styles.statCard}>
-                    <div className={styles.statLabel}>
-                      <StickyNote size={14} className={styles.cardIcon} /> Ghi
-                      chú
-                    </div>
-                    <div className={styles.statValue}>{stats.notes}</div>
-                  </div>
-                  <div className={styles.statCard}>
-                    <div className={styles.statLabel}>
-                      <CheckSquare size={14} className={styles.cardIcon} />{" "}
-                      Nhiệm vụ
-                    </div>
-                    <div className={styles.statValue}>{stats.tasks}</div>
-                  </div>
-                </div>
-
                 {/* School & Sync */}
                 <SchoolForm />
 
@@ -501,10 +455,10 @@ function SystemConfig() {
             display: "grid",
             gridTemplateColumns: "1fr 1fr",
             gap: "12px",
-            alignItems: "end",
+            alignItems: "start",
           }}
         >
-          <div className={styles.field}>
+          <div className={styles.field} style={{ marginBottom: 0 }}>
             <label>Vị trí mặc định</label>
             <input
               placeholder="VD: Trà Vinh, Hà Nội"
@@ -512,12 +466,11 @@ function SystemConfig() {
               onChange={(e) => setDefaultLoc(e.target.value)}
             />
           </div>
-          <div className={styles.field}>
+          <div className={styles.field} style={{ marginBottom: 0 }}>
             <label>Thời gian làm mới</label>
             <select
               value={cacheTtl}
               onChange={(e) => setCacheTtl(e.target.value)}
-              style={{ padding: "8px 12px" }}
             >
               {ttlOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -531,9 +484,9 @@ function SystemConfig() {
           className={styles.saveBtn}
           onClick={handleSaveWeather}
           disabled={weatherSaving}
-          style={{ marginTop: 12, width: "100%" }}
+          style={{ marginTop: 18 }}
         >
-          {weatherSaving ? "Đang lưu..." : "Lưu cấu hình thời tiết"}
+          {weatherSaving ? "Đang lưu..." : "Lưu cấu hình"}
         </button>
       </div>
     </div>
