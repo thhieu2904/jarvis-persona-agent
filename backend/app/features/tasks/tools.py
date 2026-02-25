@@ -17,6 +17,7 @@ def create_task(
     due_date: str | None = None,
     priority: str = "medium",
     description: str = "",
+    is_pinned: bool = False,
     user_id: Annotated[str, InjectedToolArg] = "",
 ) -> str:
     """Tạo task mới hoặc nhắc nhở cho chủ nhân.
@@ -26,6 +27,7 @@ def create_task(
         due_date: Hạn hoàn thành (format: YYYY-MM-DD). None = không có deadline.
         priority: Mức ưu tiên: "low", "medium", "high"
         description: Mô tả chi tiết (tùy chọn)
+        is_pinned: Ghim task lên đầu danh sách (mặc định: False)
     
     Returns:
         Xác nhận task đã được tạo.
@@ -41,6 +43,7 @@ def create_task(
             "priority": priority,
             "status": "pending",
             "source": "agent",
+            "is_pinned": is_pinned,
         })
         .execute()
     )
@@ -52,6 +55,7 @@ def create_task(
         "task_id": task["id"],
         "due_date": due_date,
         "priority": priority,
+        "is_pinned": is_pinned,
     }, ensure_ascii=False)
 
 
@@ -78,7 +82,7 @@ def list_tasks(
     if status != "all":
         query = query.eq("status", status)
 
-    result = query.order("due_date", desc=False).execute()
+    result = query.order("is_pinned", desc=True).order("due_date", desc=False).execute()
 
     if not result.data:
         return json.dumps({
@@ -96,6 +100,7 @@ def list_tasks(
             "priority": t.get("priority", "medium"),
             "status": t["status"],
             "description": t.get("description", ""),
+            "is_pinned": t.get("is_pinned", False),
         })
 
     return json.dumps({
@@ -113,10 +118,11 @@ def update_task(
     due_date: str | None = None,
     priority: str | None = None,
     status: str | None = None,
+    is_pinned: bool | None = None,
     user_id: Annotated[str, InjectedToolArg] = "",
 ) -> str:
     """Cập nhật thông tin task đã tồn tại.
-    Dùng khi chủ nhân muốn sửa tiêu đề, mô tả, deadline, ưu tiên hoặc trạng thái.
+    Dùng khi chủ nhân muốn sửa tiêu đề, mô tả, deadline, ưu tiên, trạng thái hoặc ghim/bỏ ghim.
     Trước khi gọi, hãy dùng list_tasks() để lấy task_id cần sửa.
 
     Args:
@@ -126,6 +132,7 @@ def update_task(
         due_date: Deadline mới, YYYY-MM-DD (None = giữ nguyên)
         priority: Ưu tiên mới: "low", "medium", "high" (None = giữ nguyên)
         status: Trạng thái mới: "pending", "done" (None = giữ nguyên)
+        is_pinned: Ghim/bỏ ghim task (True/False, None = giữ nguyên)
 
     Returns:
         Xác nhận đã cập nhật task.
@@ -142,6 +149,8 @@ def update_task(
         update_data["priority"] = priority
     if status is not None:
         update_data["status"] = status
+    if is_pinned is not None:
+        update_data["is_pinned"] = is_pinned
 
     if not update_data:
         return json.dumps({

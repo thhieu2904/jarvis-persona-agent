@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { StickyNote, X } from "lucide-react";
+import { StickyNote, Pin, Trash2, X } from "lucide-react";
 import styles from "../ChatPage.module.css";
 import { notesService, type Note } from "../../../services/notes.service";
 import { useChatStore } from "../../../stores/chatStore";
@@ -17,6 +17,11 @@ export default function NotesListWidget() {
     setError(null);
     try {
       const data = await notesService.listNotes();
+      // Sort pinned first
+      data.sort((a, b) => {
+        if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
+        return 0;
+      });
       setNotes(data);
     } catch {
       setError("Không thể tải ghi chú");
@@ -28,6 +33,82 @@ export default function NotesListWidget() {
   useEffect(() => {
     fetchNotes();
   }, [needsWidgetRefresh]);
+
+  const handleTogglePin = async (note: Note) => {
+    try {
+      await notesService.updateNote(note.id, { is_pinned: !note.is_pinned });
+      setNotes((prev) =>
+        prev
+          .map((n) =>
+            n.id === note.id ? { ...n, is_pinned: !n.is_pinned } : n,
+          )
+          .sort((a, b) => {
+            if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
+            return 0;
+          }),
+      );
+    } catch (err) {
+      console.error("Failed to toggle pin:", err);
+    }
+  };
+
+  const handleDelete = async (noteId: string) => {
+    try {
+      await notesService.deleteNote(noteId);
+      setNotes((prev) => prev.filter((n) => n.id !== noteId));
+    } catch (err) {
+      console.error("Failed to delete note:", err);
+    }
+  };
+
+  const renderNoteItem = (note: Note) => (
+    <div
+      key={note.id}
+      className={`${styles.noteItem} ${styles.itemWithActions} ${note.is_pinned ? styles.itemPinned : ""}`}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p
+          className={styles.noteText}
+          style={{
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            margin: 0,
+            maxWidth: "100%",
+            lineHeight: "1.4",
+          }}
+        >
+          {note.is_pinned && (
+            <span style={{ marginRight: "4px", fontSize: "10px" }}>📌</span>
+          )}
+          {note.content}
+        </p>
+        <span className={styles.noteTime}>
+          {new Date(note.created_at).toLocaleDateString("vi-VN")}
+        </span>
+      </div>
+
+      {/* Action buttons - show on hover */}
+      <div className={styles.itemActions}>
+        <button
+          className={`${styles.itemActionBtn} ${note.is_pinned ? styles.itemActionActive : ""}`}
+          onClick={() => handleTogglePin(note)}
+          title={note.is_pinned ? "Bỏ ghim" : "Ghim"}
+        >
+          <Pin size={12} />
+        </button>
+        <button
+          className={`${styles.itemActionBtn} ${styles.itemActionDanger}`}
+          onClick={() => handleDelete(note.id)}
+          title="Xóa"
+        >
+          <Trash2 size={12} />
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <>
@@ -52,28 +133,7 @@ export default function NotesListWidget() {
             <div className={styles.noteItem}>Không có ghi chú nào</div>
           ) : (
             <>
-              {notes.slice(0, 3).map((note) => (
-                <div key={note.id} className={styles.noteItem}>
-                  <p
-                    className={styles.noteText}
-                    style={{
-                      display: "-webkit-box",
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: "vertical",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      margin: 0,
-                      maxWidth: "100%",
-                      lineHeight: "1.4",
-                    }}
-                  >
-                    {note.content}
-                  </p>
-                  <span className={styles.noteTime}>
-                    {new Date(note.created_at).toLocaleDateString("vi-VN")}
-                  </span>
-                </div>
-              ))}
+              {notes.slice(0, 3).map((note) => renderNoteItem(note))}
               {notes.length > 3 && (
                 <button
                   className={styles.btnCancel}
@@ -137,16 +197,7 @@ export default function NotesListWidget() {
               }}
             >
               <div className={styles.notesList}>
-                {notes.map((note) => (
-                  <div key={note.id} className={styles.noteItem}>
-                    <p className={styles.noteText} style={{ margin: 0 }}>
-                      {note.content}
-                    </p>
-                    <span className={styles.noteTime}>
-                      {new Date(note.created_at).toLocaleDateString("vi-VN")}
-                    </span>
-                  </div>
-                ))}
+                {notes.map((note) => renderNoteItem(note))}
               </div>
             </div>
           </div>

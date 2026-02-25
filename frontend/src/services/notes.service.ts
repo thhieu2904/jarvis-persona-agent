@@ -7,6 +7,7 @@ export interface Note {
   tags: string[];
   url: string | null;
   related_subject: string | null;
+  is_pinned: boolean;
   created_at: string;
 }
 
@@ -17,5 +18,27 @@ export const notesService = {
       "/notes/?include_archived=false",
     );
     return res.data.data;
+  },
+
+  async updateNote(
+    id: string,
+    data: Partial<
+      Pick<
+        Note,
+        | "content"
+        | "note_type"
+        | "tags"
+        | "url"
+        | "related_subject"
+        | "is_pinned"
+      >
+    >,
+  ): Promise<Note> {
+    const res = await api.put<{ data: Note }>(`/notes/${id}`, data);
+    return res.data.data;
+  },
+
+  async deleteNote(id: string): Promise<void> {
+    await api.delete(`/notes/${id}`);
   },
 };

@@ -987,6 +987,107 @@
   color: var(--text-muted);
 }
 
+/* ── Widget Quick Actions ────────────────────────────── */
+.itemWithActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  position: relative;
+}
+
+.itemActions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.itemWithActions:hover .itemActions {
+  opacity: 1;
+}
+
+.itemActionBtn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.itemActionBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.itemActionActive {
+  color: var(--blue-500);
+}
+
+.itemActionActive:hover {
+  color: var(--blue-600);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.itemActionDanger:hover {
+  color: var(--red);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* Pinned item subtle highlight */
+.itemPinned {
+  border-color: rgba(59, 130, 246, 0.25);
+  background: rgba(59, 130, 246, 0.03);
+}
+
+/* Checkbox for tasks */
+.checkboxBtn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.checkbox {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--text-muted);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: white;
+  transition: all 0.2s ease;
+}
+
+.checkboxBtn:hover .checkbox {
+  border-color: var(--blue-500);
+}
+
+.checkboxChecked {
+  background: var(--blue-500);
+  border-color: var(--blue-500);
+}
+
+/* Completing animation */
+.itemCompleting {
+  opacity: 0.5;
+  transform: translateX(4px);
+  transition: all 0.4s ease;
+}
+
 /* ── Modal Dialog ──────────────────────────────────────── */
 .modalOverlay {
   position: fixed;

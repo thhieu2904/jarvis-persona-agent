@@ -24,6 +24,7 @@ class TaskUpdate(BaseModel):
     due_date: str | None = None
     priority: str | None = None
     status: str | None = None  # pending, in_progress, done
+    is_pinned: bool | None = None
 
 
 @router.get("/")
@@ -38,7 +39,7 @@ async def list_tasks(
     if status != "all":
         query = query.eq("status", status)
 
-    result = query.order("due_date", desc=False).execute()
+    result = query.order("is_pinned", desc=True).order("due_date", desc=False).execute()
     return {"data": result.data}
 
 

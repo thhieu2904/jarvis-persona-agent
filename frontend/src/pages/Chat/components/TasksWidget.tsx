@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { CheckSquare, X } from "lucide-react";
+import { CheckSquare, Pin, Trash2, X } from "lucide-react";
 import styles from "../ChatPage.module.css";
 import { tasksService, type Task } from "../../../services/tasks.service";
 import { useChatStore } from "../../../stores/chatStore";
@@ -9,6 +9,7 @@ export default function TasksWidget() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAllModal, setShowAllModal] = useState(false);
+  const [completingIds, setCompletingIds] = useState<Set<string>>(new Set());
 
   const needsWidgetRefresh = useChatStore((state) => state.needsWidgetRefresh);
 
@@ -28,6 +29,136 @@ export default function TasksWidget() {
   useEffect(() => {
     fetchTasks();
   }, [needsWidgetRefresh]);
+
+  const handleComplete = async (taskId: string) => {
+    setCompletingIds((prev) => new Set(prev).add(taskId));
+    try {
+      await tasksService.updateTask(taskId, { status: "done" });
+      // Wait a moment for animation, then remove from list
+      setTimeout(() => {
+        setTasks((prev) => prev.filter((t) => t.id !== taskId));
+        setCompletingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(taskId);
+          return next;
+        });
+      }, 600);
+    } catch (err) {
+      console.error("Failed to complete task:", err);
+      setCompletingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(taskId);
+        return next;
+      });
+    }
+  };
+
+  const handleTogglePin = async (task: Task) => {
+    try {
+      await tasksService.updateTask(task.id, { is_pinned: !task.is_pinned });
+      // Re-sort locally
+      setTasks((prev) =>
+        prev
+          .map((t) =>
+            t.id === task.id ? { ...t, is_pinned: !t.is_pinned } : t,
+          )
+          .sort((a, b) => {
+            if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
+            return 0;
+          }),
+      );
+    } catch (err) {
+      console.error("Failed to toggle pin:", err);
+    }
+  };
+
+  const handleDelete = async (taskId: string) => {
+    try {
+      await tasksService.deleteTask(taskId);
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    } catch (err) {
+      console.error("Failed to delete task:", err);
+    }
+  };
+
+  const renderTaskItem = (task: Task) => {
+    const isCompleting = completingIds.has(task.id);
+
+    return (
+      <div
+        key={task.id}
+        className={`${styles.noteItem} ${styles.itemWithActions} ${isCompleting ? styles.itemCompleting : ""} ${task.is_pinned ? styles.itemPinned : ""}`}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: "8px",
+            flex: 1,
+            minWidth: 0,
+          }}
+        >
+          {/* Checkbox */}
+          <button
+            className={styles.checkboxBtn}
+            onClick={() => handleComplete(task.id)}
+            title="Đánh dấu hoàn thành"
+            disabled={isCompleting}
+          >
+            <div
+              className={`${styles.checkbox} ${isCompleting ? styles.checkboxChecked : ""}`}
+            >
+              {isCompleting && <span>✓</span>}
+            </div>
+          </button>
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p
+              className={styles.noteText}
+              style={{
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                margin: 0,
+                maxWidth: "100%",
+                textDecoration: isCompleting ? "line-through" : "none",
+                opacity: isCompleting ? 0.5 : 1,
+                transition: "all 0.3s ease",
+              }}
+            >
+              {task.is_pinned && (
+                <span style={{ marginRight: "4px", fontSize: "10px" }}>📌</span>
+              )}
+              {task.title}
+            </p>
+            <span className={styles.noteTime}>
+              {task.due_date
+                ? new Date(task.due_date).toLocaleDateString("vi-VN")
+                : "Không có hạn"}
+            </span>
+          </div>
+        </div>
+
+        {/* Action buttons - show on hover */}
+        <div className={styles.itemActions}>
+          <button
+            className={`${styles.itemActionBtn} ${task.is_pinned ? styles.itemActionActive : ""}`}
+            onClick={() => handleTogglePin(task)}
+            title={task.is_pinned ? "Bỏ ghim" : "Ghim"}
+          >
+            <Pin size={12} />
+          </button>
+          <button
+            className={`${styles.itemActionBtn} ${styles.itemActionDanger}`}
+            onClick={() => handleDelete(task.id)}
+            title="Xóa"
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <>
@@ -52,27 +183,7 @@ export default function TasksWidget() {
             <div className={styles.noteItem}>Không có nhiệm vụ nào</div>
           ) : (
             <>
-              {tasks.slice(0, 3).map((task) => (
-                <div key={task.id} className={styles.noteItem}>
-                  <p
-                    className={styles.noteText}
-                    style={{
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      margin: 0,
-                      maxWidth: "100%",
-                    }}
-                  >
-                    {task.title}
-                  </p>
-                  <span className={styles.noteTime}>
-                    {task.due_date
-                      ? new Date(task.due_date).toLocaleDateString("vi-VN")
-                      : "Không có hạn"}
-                  </span>
-                </div>
-              ))}
+              {tasks.slice(0, 3).map((task) => renderTaskItem(task))}
               {tasks.length > 3 && (
                 <button
                   className={styles.btnCancel}
@@ -136,18 +247,7 @@ export default function TasksWidget() {
               }}
             >
               <div className={styles.notesList}>
-                {tasks.map((task) => (
-                  <div key={task.id} className={styles.noteItem}>
-                    <p className={styles.noteText} style={{ margin: 0 }}>
-                      {task.title}
-                    </p>
-                    <span className={styles.noteTime}>
-                      {task.due_date
-                        ? new Date(task.due_date).toLocaleDateString("vi-VN")
-                        : "Không có hạn"}
-                    </span>
-                  </div>
-                ))}
+                {tasks.map((task) => renderTaskItem(task))}
               </div>
             </div>
           </div>
