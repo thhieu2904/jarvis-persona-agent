@@ -14,6 +14,7 @@ export default function TasksWidget() {
   const [detailTask, setDetailTask] = useState<Task | null | undefined>(
     undefined,
   );
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   // undefined = closed, null = create new, Task = view/edit existing
 
   const needsWidgetRefresh = useChatStore((state) => state.needsWidgetRefresh);
@@ -77,11 +78,12 @@ export default function TasksWidget() {
     }
   };
 
-  const handleDelete = async (e: React.MouseEvent, taskId: string) => {
-    e.stopPropagation();
+  const confirmDelete = async () => {
+    if (!deletingTaskId) return;
     try {
-      await tasksService.deleteTask(taskId);
-      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      await tasksService.deleteTask(deletingTaskId);
+      setTasks((prev) => prev.filter((t) => t.id !== deletingTaskId));
+      setDeletingTaskId(null);
     } catch (err) {
       console.error("Failed to delete task:", err);
     }
@@ -158,7 +160,10 @@ export default function TasksWidget() {
           </button>
           <button
             className={`${styles.itemActionBtn} ${styles.itemActionDanger}`}
-            onClick={(e) => handleDelete(e, task.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setDeletingTaskId(task.id);
+            }}
             title="Xóa"
           >
             <Trash2 size={12} />
@@ -277,6 +282,67 @@ export default function TasksWidget() {
           onClose={() => setDetailTask(undefined)}
           onSaved={fetchTasks}
         />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deletingTaskId && (
+        <div
+          className={styles.modalOverlay}
+          onClick={() => setDeletingTaskId(null)}
+          style={{ zIndex: 1200 }}
+        >
+          <div
+            className={styles.modalContent}
+            style={{ maxWidth: "400px" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={styles.modalHeader}>
+              <span>Xác nhận xóa</span>
+            </div>
+            <div className={styles.modalBody}>
+              <p>Bạn có chắc chắn muốn xóa nhiệm vụ này?</p>
+            </div>
+            <div
+              className={styles.modalFooter}
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: "8px",
+                padding: "16px",
+                borderTop: "1px solid var(--border-color)",
+              }}
+            >
+              <button
+                className={styles.btnCancel}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--border-color)",
+                  background: "transparent",
+                  cursor: "pointer",
+                  color: "var(--text-color)",
+                }}
+                onClick={() => setDeletingTaskId(null)}
+              >
+                Hủy
+              </button>
+              <button
+                className={styles.btnSave}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  border: "none",
+                  background: "var(--red)",
+                  color: "white",
+                  cursor: "pointer",
+                }}
+                onClick={confirmDelete}
+              >
+                Xóa
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

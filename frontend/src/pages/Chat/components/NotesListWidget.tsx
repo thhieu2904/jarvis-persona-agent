@@ -13,6 +13,7 @@ export default function NotesListWidget() {
   const [detailNote, setDetailNote] = useState<Note | null | undefined>(
     undefined,
   );
+  const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null);
   // undefined = closed, null = create new, Note = view/edit existing
 
   const needsWidgetRefresh = useChatStore((state) => state.needsWidgetRefresh);
@@ -58,11 +59,12 @@ export default function NotesListWidget() {
     }
   };
 
-  const handleDelete = async (e: React.MouseEvent, noteId: string) => {
-    e.stopPropagation();
+  const confirmDelete = async () => {
+    if (!deletingNoteId) return;
     try {
-      await notesService.deleteNote(noteId);
-      setNotes((prev) => prev.filter((n) => n.id !== noteId));
+      await notesService.deleteNote(deletingNoteId);
+      setNotes((prev) => prev.filter((n) => n.id !== deletingNoteId));
+      setDeletingNoteId(null);
     } catch (err) {
       console.error("Failed to delete note:", err);
     }
@@ -110,7 +112,10 @@ export default function NotesListWidget() {
         </button>
         <button
           className={`${styles.itemActionBtn} ${styles.itemActionDanger}`}
-          onClick={(e) => handleDelete(e, note.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setDeletingNoteId(note.id);
+          }}
           title="Xóa"
         >
           <Trash2 size={12} />
@@ -228,6 +233,67 @@ export default function NotesListWidget() {
           onClose={() => setDetailNote(undefined)}
           onSaved={fetchNotes}
         />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deletingNoteId && (
+        <div
+          className={styles.modalOverlay}
+          onClick={() => setDeletingNoteId(null)}
+          style={{ zIndex: 1200 }}
+        >
+          <div
+            className={styles.modalContent}
+            style={{ maxWidth: "400px" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={styles.modalHeader}>
+              <span>Xác nhận xóa</span>
+            </div>
+            <div className={styles.modalBody}>
+              <p>Bạn có chắc chắn muốn xóa ghi chú này?</p>
+            </div>
+            <div
+              className={styles.modalFooter}
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: "8px",
+                padding: "16px",
+                borderTop: "1px solid var(--border-color)",
+              }}
+            >
+              <button
+                className={styles.btnCancel}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--border-color)",
+                  background: "transparent",
+                  cursor: "pointer",
+                  color: "var(--text-color)",
+                }}
+                onClick={() => setDeletingNoteId(null)}
+              >
+                Hủy
+              </button>
+              <button
+                className={styles.btnSave}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  border: "none",
+                  background: "var(--red)",
+                  color: "white",
+                  cursor: "pointer",
+                }}
+                onClick={confirmDelete}
+              >
+                Xóa
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
