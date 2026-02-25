@@ -57,7 +57,7 @@ class KnowledgeService:
         user_id: str,
         query: str,
         top_k: int = 5,
-        subject: str | None = None,
+        domain: str | None = None,
     ) -> list[dict]:
         """Semantic search across study material chunks.
 
@@ -65,7 +65,7 @@ class KnowledgeService:
             user_id: Owner of the materials.
             query: Natural language search query.
             top_k: Number of results to return.
-            subject: Optional subject filter.
+            domain: Optional domain filter (study, work, personal, other).
 
         Returns:
             List of matching chunks with material metadata.
@@ -78,7 +78,7 @@ class KnowledgeService:
                 "query_embedding": query_vector,
                 "match_user_id": user_id,
                 "match_count": top_k,
-                "filter_subject": subject,
+                "filter_domain": domain,
             },
         ).execute()
 

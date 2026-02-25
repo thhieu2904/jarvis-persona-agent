@@ -112,5 +112,62 @@ def save_memory(
     }, ensure_ascii=False)
 
 
+from typing import Literal
+
+@tool
+def search_study_materials(
+    query: str,
+    domain: Literal['study', 'work', 'personal', 'other'] | None = None,
+    user_id: Annotated[str, InjectedToolArg] = "",
+) -> str:
+    """Tìm kiếm kiến thức trong kho tài liệu (PDF, Word) của chủ nhân.
+    Dùng khi người dùng hỏi về kiến thức chuyên môn, bài giảng, tài liệu công việc.
+    
+    Args:
+        query: Câu hỏi hoặc từ khóa muốn tìm kiếm trong tài liệu.
+        domain: (Tùy chọn) Lọc theo thư mục tài liệu để tăng độ chính xác.
+            - 'study': Tài liệu học thuật, giáo trình, đề cương môn học.
+            - 'work': Tài liệu công việc, dự án, quy trình chuyên môn.
+            - 'personal': Sở thích, sách self-help, nấu ăn, thể thao.
+            - 'other': Tạp hóa các loại tài liệu không phân loại được.
+            
+    Returns:
+        Danh sách 5 đoạn văn bản (chunks) liên quan nhất trích từ các tài liệu, kèm theo tên file.
+        Agent cần đọc các đoạn trích này để tổng hợp câu trả lời cho người dùng.
+    """
+    db = get_db()
+    service = KnowledgeService(db)
+
+    results = service.search_materials_by_vector(
+        user_id=user_id,
+        query=query,
+        top_k=5,
+        domain=domain,
+    )
+
+    if not results:
+        return json.dumps({
+            "status": "success",
+            "message": "Không tìm thấy tài liệu nào liên quan đến câu hỏi này.",
+            "chunks": [],
+        }, ensure_ascii=False)
+
+    chunks = []
+    for r in results:
+        chunks.append({
+            "file_name": r.get("file_name"),
+            "domain": r.get("domain"),
+            "page_number": r.get("page_number"),
+            "content": r.get("content"),
+            "similarity": round(r.get("similarity", 0), 4),
+        })
+
+    return json.dumps({
+        "status": "success",
+        "message": f"Tìm thấy {len(chunks)} đoạn tài liệu mã hóa bằng vector liên quan nhất.",
+        "chunks": chunks,
+    }, ensure_ascii=False)
+
+
 # Export all knowledge tools for the agent graph
-knowledge_tools = [search_memories, save_memory]
+knowledge_tools = [search_memories, save_memory, search_study_materials]

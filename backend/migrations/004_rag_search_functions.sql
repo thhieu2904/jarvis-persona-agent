@@ -46,7 +46,7 @@ CREATE OR REPLACE FUNCTION search_materials_by_embedding(
     query_embedding vector(768),
     match_user_id UUID,
     match_count INT DEFAULT 5,
-    filter_subject TEXT DEFAULT NULL
+    filter_domain TEXT DEFAULT NULL
 )
 RETURNS TABLE (
     chunk_id UUID,
@@ -56,7 +56,7 @@ RETURNS TABLE (
     section_title TEXT,
     material_id UUID,
     file_name TEXT,
-    subject TEXT,
+    domain TEXT,
     similarity FLOAT
 )
 LANGUAGE plpgsql
@@ -71,13 +71,13 @@ BEGIN
         mc.section_title,
         sm.id AS material_id,
         sm.file_name,
-        sm.subject,
+        sm.domain,
         1 - (mc.embedding <=> query_embedding) AS similarity
     FROM material_chunks mc
     JOIN study_materials sm ON mc.material_id = sm.id
     WHERE sm.user_id = match_user_id
       AND mc.embedding IS NOT NULL
-      AND (filter_subject IS NULL OR sm.subject = filter_subject)
+      AND (filter_domain IS NULL OR sm.domain = filter_domain)
     ORDER BY mc.embedding <=> query_embedding
     LIMIT match_count;
 END;

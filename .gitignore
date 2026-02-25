@@ -4,6 +4,7 @@ script/
 SourceThamKhao/
 notes_prod/
 backend/tests/
+backend/scripts/
 
 # ── Python ───────────────────────────────────────────────────────
 __pycache__/

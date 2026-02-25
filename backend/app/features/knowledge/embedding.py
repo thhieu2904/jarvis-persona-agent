@@ -4,6 +4,7 @@ Wraps the LLM provider's embedding model for use across the app.
 """
 
 import logging
+from tenacity import retry, wait_exponential, stop_after_attempt
 from app.core.llm_provider import create_embeddings
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,11 @@ def get_embeddings_model():
     return _embeddings_model
 
 
+@retry(
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    stop=stop_after_attempt(5),
+    reraise=True
+)
 def embed_text(text: str) -> list[float]:
     """Generate embedding vector for a single text string.
 
@@ -36,7 +42,11 @@ def embed_text(text: str) -> list[float]:
     # Truncate to the desired dimensionality (e.g. 768)
     return vector[:settings.EMBEDDING_DIMENSIONS]
 
-
+@retry(
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    stop=stop_after_attempt(5),
+    reraise=True
+)
 def embed_texts(texts: list[str]) -> list[list[float]]:
     """Generate embedding vectors for multiple texts (batch).
 
