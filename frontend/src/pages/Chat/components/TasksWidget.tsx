@@ -54,7 +54,18 @@ export default function TasksWidget() {
             <>
               {tasks.slice(0, 3).map((task) => (
                 <div key={task.id} className={styles.noteItem}>
-                  <p className={styles.noteText}>{task.title}</p>
+                  <p
+                    className={styles.noteText}
+                    style={{
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      margin: 0,
+                      maxWidth: "100%",
+                    }}
+                  >
+                    {task.title}
+                  </p>
                   <span className={styles.noteTime}>
                     {task.due_date
                       ? new Date(task.due_date).toLocaleDateString("vi-VN")
@@ -127,7 +138,9 @@ export default function TasksWidget() {
               <div className={styles.notesList}>
                 {tasks.map((task) => (
                   <div key={task.id} className={styles.noteItem}>
-                    <p className={styles.noteText}>{task.title}</p>
+                    <p className={styles.noteText} style={{ margin: 0 }}>
+                      {task.title}
+                    </p>
                     <span className={styles.noteTime}>
                       {task.due_date
                         ? new Date(task.due_date).toLocaleDateString("vi-VN")

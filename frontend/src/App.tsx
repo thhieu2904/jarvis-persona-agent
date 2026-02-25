@@ -7,7 +7,7 @@ import RegisterPage from "./pages/Register/RegisterPage";
 import ChatPage from "./pages/Chat/ChatPage";
 import SettingsLayout from "./pages/Settings/SettingsLayout";
 import ProfileSettingsPage from "./pages/Settings/ProfileSettingsPage";
-import IoTManagementTab from "./pages/Settings/components/IoTManagementTab";
+import IoTManagementTab from "./pages/Settings/IoTManagementTab";
 import SchedulerSettingsPage from "./pages/Settings/SchedulerSettingsPage";
 
 export default function App() {

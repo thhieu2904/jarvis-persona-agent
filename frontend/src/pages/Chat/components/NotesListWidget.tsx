@@ -54,7 +54,21 @@ export default function NotesListWidget() {
             <>
               {notes.slice(0, 3).map((note) => (
                 <div key={note.id} className={styles.noteItem}>
-                  <p className={styles.noteText}>{note.content}</p>
+                  <p
+                    className={styles.noteText}
+                    style={{
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      margin: 0,
+                      maxWidth: "100%",
+                      lineHeight: "1.4",
+                    }}
+                  >
+                    {note.content}
+                  </p>
                   <span className={styles.noteTime}>
                     {new Date(note.created_at).toLocaleDateString("vi-VN")}
                   </span>
@@ -125,7 +139,9 @@ export default function NotesListWidget() {
               <div className={styles.notesList}>
                 {notes.map((note) => (
                   <div key={note.id} className={styles.noteItem}>
-                    <p className={styles.noteText}>{note.content}</p>
+                    <p className={styles.noteText} style={{ margin: 0 }}>
+                      {note.content}
+                    </p>
                     <span className={styles.noteTime}>
                       {new Date(note.created_at).toLocaleDateString("vi-VN")}
                     </span>

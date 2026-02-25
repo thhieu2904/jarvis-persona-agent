@@ -4,8 +4,8 @@ import {
   iotService,
   type IoTDevice,
   type IoTDeviceCreate,
-} from "../../../services/iot.service";
-import styles from "../SettingsPage.module.css";
+} from "../../services/iot.service";
+import styles from "./SettingsPage.module.css";
 
 export default function IoTManagementTab() {
   const [devices, setDevices] = useState<IoTDevice[]>([]);
