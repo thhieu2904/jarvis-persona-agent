@@ -32,31 +32,19 @@ export default function WeatherWidget() {
   const [locationName, setLocationName] = useState("Trà Vinh");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
+  // Read preferences directly from Zustand store
+  const savedLocation = (user?.preferences as Record<string, unknown>)
+    ?.default_location as string | undefined;
+  const savedCacheTtl = (user?.preferences as Record<string, unknown>)
+    ?.weather_cache_ttl as number | undefined;
+
   const getCacheTtl = (): number => {
-    try {
-      const userStr = localStorage.getItem("user");
-      if (userStr) {
-        const user = JSON.parse(userStr);
-        const ttl = user?.preferences?.weather_cache_ttl;
-        if (ttl) return Number(ttl) * 1000; // convert seconds to ms
-      }
-    } catch {
-      /* ignore */
-    }
+    if (savedCacheTtl) return Number(savedCacheTtl) * 1000;
     return DEFAULT_TTL;
   };
 
   const getDefaultLocation = (): string => {
-    try {
-      const userStr = localStorage.getItem("user");
-      if (userStr) {
-        const user = JSON.parse(userStr);
-        return user?.preferences?.default_location || "Trà Vinh";
-      }
-    } catch {
-      /* ignore */
-    }
-    return "Trà Vinh";
+    return savedLocation || "Trà Vinh";
   };
 
   const fetchWeather = useCallback(
@@ -155,6 +143,16 @@ export default function WeatherWidget() {
   useEffect(() => {
     fetchWeather();
   }, [fetchWeather]);
+
+  // Re-fetch when the user changes default_location in Settings
+  useEffect(() => {
+    if (savedLocation) {
+      // Clear cache so we fetch fresh data for the new location
+      localStorage.removeItem(CACHE_KEY);
+      setRefreshing(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedLocation]);
 
   const handleUpdateLocation = () => {
     if (!navigator.geolocation) {

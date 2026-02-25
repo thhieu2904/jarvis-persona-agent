@@ -162,7 +162,15 @@ export default function RoutineConfig() {
   }
 
   return (
-    <div className={styles.card} style={{ marginBottom: "var(--space-xl)" }}>
+    <div
+      className={styles.card}
+      style={{
+        marginBottom: 0,
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+      }}
+    >
       <h2 className={styles.cardTitle}>
         <Clock size={18} className={styles.cardIcon} /> Báo cáo tự động
       </h2>

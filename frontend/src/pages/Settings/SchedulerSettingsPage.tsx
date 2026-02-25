@@ -13,7 +13,8 @@ export default function SchedulerSettingsPage() {
           display: "grid",
           gridTemplateColumns: "1fr 1fr",
           gap: "24px",
-          alignItems: "start",
+          alignItems: "stretch",
+          marginBottom: "24px",
         }}
       >
         {/* Routine Config Section */}
