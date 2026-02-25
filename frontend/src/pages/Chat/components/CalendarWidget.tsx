@@ -77,8 +77,11 @@ export default function CalendarWidget() {
     });
   }
 
-  // Next month padding to complete the grid (usually 42 cells total for 6 rows)
-  const remainingCells = 42 - days.length;
+  // Next month padding to complete the grid (only necessary rows)
+  const totalDaysSoFar = days.length;
+  const totalCellsNeeded = Math.ceil(totalDaysSoFar / 7) * 7;
+  const remainingCells = totalCellsNeeded - totalDaysSoFar;
+
   for (let i = 1; i <= remainingCells; i++) {
     days.push({
       date: i,
@@ -90,8 +93,11 @@ export default function CalendarWidget() {
   const todayStr = new Date().toISOString().split("T")[0];
 
   return (
-    <div className={`${styles.widget} glass-panel`}>
-      <div className={styles.widgetHeader}>
+    <div
+      className={`${styles.widget} glass-panel`}
+      style={{ padding: "12px 16px" }}
+    >
+      <div className={styles.widgetHeader} style={{ marginBottom: "8px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <Calendar size={16} className={styles.widgetIcon} />
           <h3 className={styles.widgetTitle}>
@@ -108,14 +114,34 @@ export default function CalendarWidget() {
         </div>
       </div>
       <div className={styles.calendarGrid}>
-        {daysLabels.map((d) => (
-          <div key={d} className={styles.calendarDayName}>
-            {d}
-          </div>
-        ))}
+        {daysLabels.map((d, idx) => {
+          const isWeekendLabel = idx === 5 || idx === 6;
+          return (
+            <div
+              key={d}
+              className={styles.calendarDayName}
+              style={
+                isWeekendLabel
+                  ? { color: "var(--red)", opacity: 0.8 }
+                  : undefined
+              }
+            >
+              {d}
+            </div>
+          );
+        })}
         {days.map((d, idx) => {
           const tasks = monthlyTasks[d.fullDate];
           const isToday = d.fullDate === todayStr;
+          const isWeekend = idx % 7 === 5 || idx % 7 === 6;
+
+          let weekendStyle = undefined;
+          if (isWeekend && !isToday) {
+            weekendStyle = {
+              color: "var(--red)",
+              opacity: d.isCurrentMonth ? 0.8 : 0.4,
+            };
+          }
 
           return (
             <div
@@ -123,6 +149,7 @@ export default function CalendarWidget() {
               className={`${styles.calendarDate} ${
                 d.isCurrentMonth ? "" : styles.calendarDateMuted
               } ${isToday ? styles.calendarDateActive : ""}`}
+              style={weekendStyle}
               title={tasks ? tasks.join(", ") : undefined}
             >
               <span>{d.date}</span>

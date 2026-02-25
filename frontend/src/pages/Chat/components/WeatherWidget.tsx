@@ -227,8 +227,11 @@ export default function WeatherWidget() {
   const info = getDisplayInfo();
 
   return (
-    <div className={`${styles.widget} ${styles.weatherWidget} glass-panel`}>
-      <div className={styles.widgetHeader}>
+    <div
+      className={`${styles.widget} ${styles.weatherWidget} glass-panel`}
+      style={{ padding: "12px 16px" }}
+    >
+      <div className={styles.widgetHeader} style={{ marginBottom: "8px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <CloudSun size={16} className={styles.widgetIcon} />
           <h3 className={styles.widgetTitle}>Thời tiết</h3>
@@ -278,14 +281,26 @@ export default function WeatherWidget() {
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
+              marginTop: "-4px",
+              marginBottom: "0px",
             }}
           >
             <div>
               {info?.temp !== undefined && (
-                <div className={styles.weatherTemp}>{info.temp}°C</div>
+                <div
+                  className={styles.weatherTemp}
+                  style={{ fontSize: "28px" }}
+                >
+                  {info.temp}°C
+                </div>
               )}
               {info?.desc && (
-                <div className={styles.weatherDesc}>{info.desc}</div>
+                <div
+                  className={styles.weatherDesc}
+                  style={{ fontSize: "12px" }}
+                >
+                  {info.desc}
+                </div>
               )}
             </div>
 
@@ -294,11 +309,11 @@ export default function WeatherWidget() {
                 src={`https://openweathermap.org/img/wn/${info.icon}@2x.png`}
                 alt="Thời tiết"
                 style={{
-                  width: "64px",
-                  height: "64px",
+                  width: "48px",
+                  height: "48px",
                   filter:
                     "drop-shadow(0 4px 6px rgba(0,0,0,0.2)) drop-shadow(0 0 10px rgba(255,255,255,0.4))",
-                  transform: "scale(1.2) translateY(-4px)",
+                  transform: "scale(1.1)",
                 }}
               />
             )}
