@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Knowledge Base"])
 
-ALLOWED_EXTENSIONS = {"pdf", "docx", "txt"}
+ALLOWED_EXTENSIONS = {"pdf", "docx", "txt", "md"}
 
 def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -29,7 +29,7 @@ async def upload_document(
     - Gọi background task bóc tách, băm nhỏ và nhúng Vector.
     """
     if not allowed_file(file.filename):
-        raise HTTPException(status_code=400, detail="Only PDF, DOCX, and TXT files are allowed.")
+        raise HTTPException(status_code=400, detail="Only PDF, DOCX, TXT, and MD files are allowed.")
     
     valid_domains = {"study", "work", "personal", "other"}
     if domain not in valid_domains:
@@ -45,6 +45,11 @@ async def upload_document(
     try:
         # Đọc file ra memory
         file_bytes = await file.read()
+        
+        # 1.1 Chặn dung lượng File (50MB Limit cho Luồng 2 RAG)
+        MAX_SIZE_PERSISTENT = 50 * 1024 * 1024 # 50MB
+        if len(file_bytes) > MAX_SIZE_PERSISTENT:
+             raise HTTPException(status_code=413, detail="File too large. Maximum size for Knowledge Base upload is 50MB.")
         
         # 2. Upload lên Supabase Storage
         res_storage = db.storage.from_("knowledge-base").upload(
@@ -113,7 +118,7 @@ async def extract_text_only(
     File gốc vẫn được lưu tạm vào Storage `knowledge-base/{user_id}/temp/{filename}` để phòng hờ user muốn "Save to Knowledge Base" sau này.
     """
     if not allowed_file(file.filename):
-        raise HTTPException(status_code=400, detail="Only PDF, DOCX, and TXT files are allowed.")
+        raise HTTPException(status_code=400, detail="Only PDF, DOCX, TXT, and MD files are allowed.")
         
     db = get_supabase_client()
     safe_filename = secure_filename(file.filename)

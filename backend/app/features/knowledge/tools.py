@@ -169,5 +169,80 @@ def search_study_materials(
     }, ensure_ascii=False)
 
 
+import threading
+from app.core.database import get_supabase_client
+
+@tool
+def save_temp_document_to_knowledge_base(
+    file_name: str,
+    domain: Literal['study', 'work', 'personal', 'other'],
+    user_id: Annotated[str, InjectedToolArg] = "",
+) -> str:
+    """Lưu trữ vĩnh viễn (Dạy AI) một tài liệu đang được đính kèm tạm thời trong luồng chat.
+    Dùng khi file người dùng gửi có chứa thẻ metadata [SYS_FILE: ...] và người dùng yêu cầu "Lưu file này lại", "Đưa file tài liệu này vào kho cho tôi".
+    
+    Args:
+        file_name: Tên file chính xác được trích xuất từ thẻ [SYS_FILE] của file đang đính kèm.
+        domain: Phân loại tài liệu vào 1 trong 4 thư mục: 'study', 'work', 'personal', 'other'. Tự suy luận từ yêu cầu của User.
+        
+    Returns:
+        Kết quả di chuyển file và trạng thái chạy tiến trình học RAG.
+    """
+    db = get_supabase_client()
+    old_path = f"{user_id}/temp/{file_name}"
+    new_path = f"{user_id}/{domain}/{file_name}"
+    
+    try:
+        # 1. Luân chuyển file từ nhánh /temp sang /domain cố định
+        db.storage.from_("knowledge-base").move(old_path, new_path)
+        
+        # Determine content type manually
+        content_type = "application/pdf" if file_name.endswith(".pdf") else "application/vnd.openxmlformats-officedocument.wordprocessingml.document" if file_name.endswith(".docx") else "text/plain"
+
+        # 2. Tạo bản ghi quản lý vào bảng study_materials
+        insert_data = {
+            "user_id": user_id,
+            "file_name": file_name,
+            "file_type": content_type,
+            "file_url": new_path,
+            "domain": domain,
+            "processing_status": "processing"
+        }
+        res_db = db.table("study_materials").insert(insert_data).execute()
+        material_id = res_db.data[0]["id"]
+        
+        # 3. Tải nội dung bytes về để chạy RAG
+        file_res = db.storage.from_("knowledge-base").download(new_path)
+        
+        # 4. Kích hoạt Background Task chạy RAG (Chunking + Embedding) bằng Thread
+        # Sử dụng threading để không block tool chạy trả kết quả cho Agent
+        from app.background.document_tasks import process_document_pipeline
+        
+        def run_pipeline():
+            process_document_pipeline(
+                material_id=material_id, 
+                user_id=user_id, 
+                file_bytes=file_res, 
+                filename=file_name,
+                content_type=content_type
+            )
+            
+        thread = threading.Thread(target=run_pipeline, daemon=True)
+        thread.start()
+        
+        return json.dumps({
+            "status": "success",
+            "message": f"Đã bắt đầu quy trình lưu file '{file_name}' vào mục '{domain}'. Tài liệu đang được nhúng vector chạy ngầm.",
+            "file_name": file_name,
+            "domain": domain
+        }, ensure_ascii=False)
+        
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Không thể lưu file (File có thể không tồn tại hoặc lỗi): {str(e)}"
+        }, ensure_ascii=False)
+
+
 # Export all knowledge tools for the agent graph
-knowledge_tools = [search_memories, save_memory, search_study_materials]
+knowledge_tools = [search_memories, save_memory, search_study_materials, save_temp_document_to_knowledge_base]
