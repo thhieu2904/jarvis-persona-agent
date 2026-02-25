@@ -1,14 +1,19 @@
 import { useState, useEffect } from "react";
-import { StickyNote, Pin, Trash2, X } from "lucide-react";
+import { StickyNote, Pin, Trash2, X, Plus } from "lucide-react";
 import styles from "../ChatPage.module.css";
 import { notesService, type Note } from "../../../services/notes.service";
 import { useChatStore } from "../../../stores/chatStore";
+import NoteDetailModal from "./NoteDetailModal";
 
 export default function NotesListWidget() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAllModal, setShowAllModal] = useState(false);
+  const [detailNote, setDetailNote] = useState<Note | null | undefined>(
+    undefined,
+  );
+  // undefined = closed, null = create new, Note = view/edit existing
 
   const needsWidgetRefresh = useChatStore((state) => state.needsWidgetRefresh);
 
@@ -34,7 +39,8 @@ export default function NotesListWidget() {
     fetchNotes();
   }, [needsWidgetRefresh]);
 
-  const handleTogglePin = async (note: Note) => {
+  const handleTogglePin = async (e: React.MouseEvent, note: Note) => {
+    e.stopPropagation();
     try {
       await notesService.updateNote(note.id, { is_pinned: !note.is_pinned });
       setNotes((prev) =>
@@ -52,7 +58,8 @@ export default function NotesListWidget() {
     }
   };
 
-  const handleDelete = async (noteId: string) => {
+  const handleDelete = async (e: React.MouseEvent, noteId: string) => {
+    e.stopPropagation();
     try {
       await notesService.deleteNote(noteId);
       setNotes((prev) => prev.filter((n) => n.id !== noteId));
@@ -65,6 +72,8 @@ export default function NotesListWidget() {
     <div
       key={note.id}
       className={`${styles.noteItem} ${styles.itemWithActions} ${note.is_pinned ? styles.itemPinned : ""}`}
+      onClick={() => setDetailNote(note)}
+      style={{ cursor: "pointer" }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
         <p
@@ -94,14 +103,14 @@ export default function NotesListWidget() {
       <div className={styles.itemActions}>
         <button
           className={`${styles.itemActionBtn} ${note.is_pinned ? styles.itemActionActive : ""}`}
-          onClick={() => handleTogglePin(note)}
+          onClick={(e) => handleTogglePin(e, note)}
           title={note.is_pinned ? "Bỏ ghim" : "Ghim"}
         >
           <Pin size={12} />
         </button>
         <button
           className={`${styles.itemActionBtn} ${styles.itemActionDanger}`}
-          onClick={() => handleDelete(note.id)}
+          onClick={(e) => handleDelete(e, note.id)}
           title="Xóa"
         >
           <Trash2 size={12} />
@@ -118,6 +127,13 @@ export default function NotesListWidget() {
             <StickyNote size={16} className={styles.widgetIcon} />
             <h3 className={styles.widgetTitle}>Ghi chú nhanh</h3>
           </div>
+          <button
+            className={styles.weatherLocationBtn}
+            onClick={() => setDetailNote(null)}
+            title="Thêm ghi chú mới"
+          >
+            <Plus size={14} />
+          </button>
         </div>
         <div className={styles.notesList}>
           {loading ? (
@@ -153,6 +169,7 @@ export default function NotesListWidget() {
         </div>
       </div>
 
+      {/* "See all" modal */}
       {showAllModal && (
         <div
           className={styles.modalOverlay}
@@ -202,6 +219,15 @@ export default function NotesListWidget() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Note Detail Modal (create / view / edit) */}
+      {detailNote !== undefined && (
+        <NoteDetailModal
+          note={detailNote}
+          onClose={() => setDetailNote(undefined)}
+          onSaved={fetchNotes}
+        />
       )}
     </>
   );

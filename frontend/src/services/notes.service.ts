@@ -20,6 +20,15 @@ export const notesService = {
     return res.data.data;
   },
 
+  async createNote(data: {
+    content: string;
+    note_type?: string;
+    tags?: string[];
+  }): Promise<Note> {
+    const res = await api.post<{ data: Note }>("/notes/", data);
+    return res.data.data;
+  },
+
   async updateNote(
     id: string,
     data: Partial<

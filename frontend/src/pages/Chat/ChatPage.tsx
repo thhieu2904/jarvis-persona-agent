@@ -72,13 +72,17 @@ export default function ChatPage() {
     }
     // Auto stop if silence for 3 seconds
     silenceTimeoutRef.current = setTimeout(() => {
-      if (recognitionRef.current && isListening) {
-        recognitionRef.current.stop();
-        setIsListening(false);
-        setInterimInput(""); // Clear interim on stop
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {
+          // ignore
+        }
       }
+      setIsListening(false);
+      setInterimInput(""); // Clear interim on stop
     }, 3000);
-  }, [isListening]);
+  }, []);
 
   useEffect(() => {
     // Initialize SpeechRecognition
@@ -115,7 +119,9 @@ export default function ChatPage() {
       };
 
       recognition.onerror = (event: any) => {
-        console.error("Speech recognition error", event.error);
+        if (event.error !== "no-speech" && event.error !== "aborted") {
+          console.error("Speech recognition error:", event.error);
+        }
         if (event.error === "not-allowed") {
           alert(
             "Vui lòng cấp quyền sử dụng Micro cho trình duyệt để dùng tính năng này.",
@@ -138,6 +144,13 @@ export default function ChatPage() {
     }
 
     return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {
+          // ignore
+        }
+      }
       if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
     };
   }, [resetSilenceTimeout]);

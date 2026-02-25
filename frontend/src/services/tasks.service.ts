@@ -16,6 +16,16 @@ export const tasksService = {
     return res.data.data;
   },
 
+  async createTask(data: {
+    title: string;
+    description?: string;
+    due_date?: string | null;
+    priority?: string;
+  }): Promise<Task> {
+    const res = await api.post<{ data: Task }>("/tasks/", data);
+    return res.data.data;
+  },
+
   async updateTask(
     id: string,
     data: Partial<

@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { CheckSquare, Pin, Trash2, X } from "lucide-react";
+import { CheckSquare, Pin, Trash2, X, Plus } from "lucide-react";
 import styles from "../ChatPage.module.css";
 import { tasksService, type Task } from "../../../services/tasks.service";
 import { useChatStore } from "../../../stores/chatStore";
+import TaskDetailModal from "./TaskDetailModal";
 
 export default function TasksWidget() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -10,6 +11,10 @@ export default function TasksWidget() {
   const [error, setError] = useState<string | null>(null);
   const [showAllModal, setShowAllModal] = useState(false);
   const [completingIds, setCompletingIds] = useState<Set<string>>(new Set());
+  const [detailTask, setDetailTask] = useState<Task | null | undefined>(
+    undefined,
+  );
+  // undefined = closed, null = create new, Task = view/edit existing
 
   const needsWidgetRefresh = useChatStore((state) => state.needsWidgetRefresh);
 
@@ -30,11 +35,11 @@ export default function TasksWidget() {
     fetchTasks();
   }, [needsWidgetRefresh]);
 
-  const handleComplete = async (taskId: string) => {
+  const handleComplete = async (e: React.MouseEvent, taskId: string) => {
+    e.stopPropagation();
     setCompletingIds((prev) => new Set(prev).add(taskId));
     try {
       await tasksService.updateTask(taskId, { status: "done" });
-      // Wait a moment for animation, then remove from list
       setTimeout(() => {
         setTasks((prev) => prev.filter((t) => t.id !== taskId));
         setCompletingIds((prev) => {
@@ -53,10 +58,10 @@ export default function TasksWidget() {
     }
   };
 
-  const handleTogglePin = async (task: Task) => {
+  const handleTogglePin = async (e: React.MouseEvent, task: Task) => {
+    e.stopPropagation();
     try {
       await tasksService.updateTask(task.id, { is_pinned: !task.is_pinned });
-      // Re-sort locally
       setTasks((prev) =>
         prev
           .map((t) =>
@@ -72,7 +77,8 @@ export default function TasksWidget() {
     }
   };
 
-  const handleDelete = async (taskId: string) => {
+  const handleDelete = async (e: React.MouseEvent, taskId: string) => {
+    e.stopPropagation();
     try {
       await tasksService.deleteTask(taskId);
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
@@ -88,6 +94,8 @@ export default function TasksWidget() {
       <div
         key={task.id}
         className={`${styles.noteItem} ${styles.itemWithActions} ${isCompleting ? styles.itemCompleting : ""} ${task.is_pinned ? styles.itemPinned : ""}`}
+        onClick={() => setDetailTask(task)}
+        style={{ cursor: "pointer" }}
       >
         <div
           style={{
@@ -101,7 +109,7 @@ export default function TasksWidget() {
           {/* Checkbox */}
           <button
             className={styles.checkboxBtn}
-            onClick={() => handleComplete(task.id)}
+            onClick={(e) => handleComplete(e, task.id)}
             title="Đánh dấu hoàn thành"
             disabled={isCompleting}
           >
@@ -143,14 +151,14 @@ export default function TasksWidget() {
         <div className={styles.itemActions}>
           <button
             className={`${styles.itemActionBtn} ${task.is_pinned ? styles.itemActionActive : ""}`}
-            onClick={() => handleTogglePin(task)}
+            onClick={(e) => handleTogglePin(e, task)}
             title={task.is_pinned ? "Bỏ ghim" : "Ghim"}
           >
             <Pin size={12} />
           </button>
           <button
             className={`${styles.itemActionBtn} ${styles.itemActionDanger}`}
-            onClick={() => handleDelete(task.id)}
+            onClick={(e) => handleDelete(e, task.id)}
             title="Xóa"
           >
             <Trash2 size={12} />
@@ -168,6 +176,13 @@ export default function TasksWidget() {
             <CheckSquare size={16} className={styles.widgetIcon} />
             <h3 className={styles.widgetTitle}>Nhiệm vụ sắp tới</h3>
           </div>
+          <button
+            className={styles.weatherLocationBtn}
+            onClick={() => setDetailTask(null)}
+            title="Thêm nhiệm vụ mới"
+          >
+            <Plus size={14} />
+          </button>
         </div>
         <div className={styles.notesList}>
           {loading ? (
@@ -203,6 +218,7 @@ export default function TasksWidget() {
         </div>
       </div>
 
+      {/* "See all" modal */}
       {showAllModal && (
         <div
           className={styles.modalOverlay}
@@ -252,6 +268,15 @@ export default function TasksWidget() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Task Detail Modal (create / view / edit) */}
+      {detailTask !== undefined && (
+        <TaskDetailModal
+          task={detailTask}
+          onClose={() => setDetailTask(undefined)}
+          onSaved={fetchTasks}
+        />
       )}
     </>
   );
