@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS quick_notes (
     related_subject TEXT,               -- Liên kết môn học
     
     -- Semantic search (Phase 2.5: filled by background job)
-    embedding vector(3072),             -- NULL lúc INSERT, bg job fill sau
+    embedding vector(768),             -- NULL lúc INSERT, bg job fill sau
     
     -- Quản lý
     is_pinned BOOLEAN DEFAULT FALSE,
@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     location TEXT,
     
     -- Semantic search (Phase 2.5: filled by background job)
-    embedding vector(3072),              -- NULL lúc INSERT, bg job fill sau
+    embedding vector(768),              -- NULL lúc INSERT, bg job fill sau
     
     -- Quản lý
     source TEXT DEFAULT 'user',          -- user | agent
@@ -89,4 +89,4 @@ CREATE TRIGGER trg_events_updated
 -- 3. Add embedding column to tasks_reminders
 -- =====================================================
 ALTER TABLE tasks_reminders 
-    ADD COLUMN IF NOT EXISTS embedding vector(3072);
+    ADD COLUMN IF NOT EXISTS embedding vector(768);

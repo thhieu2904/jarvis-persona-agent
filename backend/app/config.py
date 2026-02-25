@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     # ── Embedding ────────────────────────────────────────
     EMBEDDING_PROVIDER: str = "gemini"
     EMBEDDING_MODEL: str = "gemini-embedding-001"
-    EMBEDDING_DIMENSIONS: int = 3072
+    EMBEDDING_DIMENSIONS: int = 768
 
     # ── School API ───────────────────────────────────────
     SCHOOL_API_BASE_URL: str = "https://ttsv.tvu.edu.vn/public/api"

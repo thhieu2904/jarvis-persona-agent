@@ -34,6 +34,7 @@ from app.features.agent.tools.image_gen import image_tools
 from app.features.agent.tools.weather import weather_tools
 from app.features.iot.tuya import list_smart_home_devices, toggle_smart_plug
 from app.features.agent.tools.scheduler_tools import schedule_automation
+from app.features.knowledge.tools import knowledge_tools
 
 # ── State Definition ─────────────────────────────────────
 class AgentState(TypedDict):
@@ -67,6 +68,8 @@ ALL_TOOLS = [
     toggle_smart_plug,
     # Dynamic Scheduler
     schedule_automation,
+    # Knowledge / RAG (Phase 3)
+    *knowledge_tools,
 ]
 
 

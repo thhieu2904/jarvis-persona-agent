@@ -2,7 +2,7 @@
 Notes feature: API routes for quick note management.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, BackgroundTasks
 from supabase import Client
 
 from app.core.dependencies import get_db, get_current_user_id
@@ -28,10 +28,11 @@ async def list_notes(
 @router.post("/")
 async def create_note(
     data: NoteCreate,
+    background_tasks: BackgroundTasks,
     user_id: str = Depends(get_current_user_id),
     db: Client = Depends(get_db),
 ):
-    """Create a new quick note."""
+    """Create a new quick note. Embedding is generated in background."""
     service = NotesService(db)
     note = service.create_note(
         user_id=user_id,
@@ -41,6 +42,9 @@ async def create_note(
         url=data.url,
         related_subject=data.related_subject,
     )
+    # Background: generate embedding vector (non-blocking) and track status
+    from app.background.embedding_tasks import process_note_embedding
+    background_tasks.add_task(process_note_embedding, note["id"], data.content)
     return {"data": note}
 
 
@@ -61,12 +65,16 @@ async def search_notes(
 async def update_note(
     note_id: str,
     data: NoteUpdate,
+    background_tasks: BackgroundTasks,
     user_id: str = Depends(get_current_user_id),
     db: Client = Depends(get_db),
 ):
-    """Update an existing note."""
+    """Update an existing note. Re-embeds if content changed."""
     service = NotesService(db)
     note = service.update_note(user_id, note_id, data.model_dump())
+    # Re-embed if content was updated
+    if data.content is not None and note:
+        background_tasks.add_task(service.embed_note, note["id"], data.content)
     return {"data": note}
 
 

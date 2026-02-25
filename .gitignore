@@ -3,6 +3,7 @@ plans/
 script/
 SourceThamKhao/
 notes_prod/
+backend/tests/
 
 # ── Python ───────────────────────────────────────────────────────
 __pycache__/

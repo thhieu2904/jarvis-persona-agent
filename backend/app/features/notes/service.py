@@ -28,9 +28,11 @@ class NotesService:
             "tags": tags or [],
             "url": url,
             "related_subject": related_subject,
+            "embedding_status": "pending",  # Dashboard tracking
         }
         result = self.db.table("quick_notes").insert(insert_data).execute()
         return result.data[0]
+
 
     def list_notes(
         self,

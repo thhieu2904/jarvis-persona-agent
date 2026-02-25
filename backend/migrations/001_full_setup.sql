@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS material_chunks (
     chunk_index INT NOT NULL,
     page_number INT,
     section_title TEXT,
-    embedding vector(3072),
+    embedding vector(768),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -176,7 +176,7 @@ CREATE TABLE IF NOT EXISTS quick_notes (
     tags TEXT[],
     url TEXT,
     related_subject TEXT,
-    embedding vector(3072),
+    embedding vector(768),
     is_pinned BOOLEAN DEFAULT FALSE,
     is_archived BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -205,7 +205,7 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     end_time TIMESTAMPTZ,
     is_all_day BOOLEAN DEFAULT FALSE,
     location TEXT,
-    embedding vector(3072),
+    embedding vector(768),
     source TEXT DEFAULT 'user',
     reminder_minutes INT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -223,4 +223,4 @@ CREATE TRIGGER trg_events_updated
 
 -- 10. Add embedding column to tasks_reminders
 ALTER TABLE tasks_reminders
-    ADD COLUMN IF NOT EXISTS embedding vector(3072);
+    ADD COLUMN IF NOT EXISTS embedding vector(768);
