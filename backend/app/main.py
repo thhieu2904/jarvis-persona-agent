@@ -25,9 +25,6 @@ from app.features.calendar.router import router as calendar_router
 from app.features.knowledge.router import router as knowledge_router
 from app.features.iot.router import router as iot_router
 
-# Phase 3: Uncomment when knowledge feature is ready
-# from app.features.knowledge.router import router as knowledge_router
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -93,8 +90,7 @@ def create_app() -> FastAPI:
     app.include_router(calendar_router, prefix="/api/calendar", tags=["Calendar"])
     app.include_router(knowledge_router, prefix="/api/knowledge", tags=["Knowledge"])
     app.include_router(iot_router, prefix="/api", tags=["IoT Devices"])
-    # Phase 3:
-    # app.include_router(knowledge_router, prefix="/api/knowledge", tags=["Knowledge"])
+
 
     # ── Health Check ─────────────────────────────────────
     @app.get("/health", tags=["System"])

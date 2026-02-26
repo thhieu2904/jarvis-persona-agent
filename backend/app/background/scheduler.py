@@ -49,10 +49,13 @@ EVENING_PROMPT = (
 
 
 def _get_owner_user_id() -> str | None:
-    """Get the single owner's user_id from the database."""
+    """Get the single owner's user_id from the database.
+    
+    Personal agent: designed for single-user. Gets the primary user.
+    """
     try:
         db = get_supabase_client()
-        result = db.table("users").select("id").limit(1).execute()
+        result = db.table("users").select("id").order("created_at", desc=False).limit(1).execute()
         if result.data:
             return result.data[0]["id"]
     except Exception as e:

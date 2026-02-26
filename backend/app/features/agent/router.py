@@ -7,14 +7,16 @@ import os
 import json
 import asyncio
 import time
-import urllib.request
-import ssl
+import logging
+from time import time as time_now
 
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse
 from supabase import Client
 from langchain_core.messages import HumanMessage, ToolMessage
+import httpx
+from cachetools import TTLCache
 
 from app.config import get_settings
 from app.core.dependencies import get_db, get_current_user_id
@@ -402,7 +404,8 @@ async def get_routine_schedule(
         "morning_routine_prompt": prefs.get("morning_routine_prompt"),
         "evening_routine_prompt": prefs.get("evening_routine_prompt"),
     }
-_weather_cache = {}
+# Weather cache: max 50 entries, default TTL 30 min (overridden per-entry by user pref)
+_weather_cache: TTLCache = TTLCache(maxsize=50, ttl=1800)
 
 @router.get("/weather")
 async def get_weather_data(
@@ -423,77 +426,61 @@ async def get_weather_data(
     # Determine query and cache key
     cache_key = ""
     prompt = ""
+    loc_str = ""
     
     try:
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-
-        if lat is not None and lon is not None:
-            # Reverse geocoding
-            geo_url = f"http://api.openweathermap.org/geo/1.0/reverse?lat={lat}&lon={lon}&limit=1&appid={api_key}"
-            geo_req = urllib.request.Request(geo_url)
-            with urllib.request.urlopen(geo_req, context=ctx, timeout=10) as geo_res:
-                geo_data = json.loads(geo_res.read())
+        async with httpx.AsyncClient(timeout=15) as client:
+            if lat is not None and lon is not None:
+                # Reverse geocoding
+                geo_url = f"http://api.openweathermap.org/geo/1.0/reverse?lat={lat}&lon={lon}&limit=1&appid={api_key}"
+                geo_res = await client.get(geo_url)
+                geo_data = geo_res.json()
                 if geo_data and len(geo_data) > 0:
                     city_name = geo_data[0].get("local_names", {}).get("vi", geo_data[0].get("name", ""))
                     state = geo_data[0].get("state", "")
                     loc_str = f"{city_name}, {state}" if state else city_name
-                    # Round coords to 2 decimals to improve cache hit rate
                     cache_key = f"{round(lat, 2)},{round(lon, 2)}"
                     prompt = f"Thời tiết hiện tại ở {loc_str} thế nào?"
                 else:
                     cache_key = f"{round(lat, 2)},{round(lon, 2)}"
                     prompt = f"Thời tiết hiện tại ở tọa độ {lat}, {lon} thế nào?"
-        else:
-            loc = default_loc or "Trà Vinh"
-            cache_key = loc
-            prompt = f"Thời tiết hiện tại ở {loc} thế nào?"
+            else:
+                loc = default_loc or "Trà Vinh"
+                cache_key = loc
+                prompt = f"Thời tiết hiện tại ở {loc} thế nào?"
 
-        # Check cache
-        now = time.time()
-        cached_entry = _weather_cache.get(cache_key)
-        if cached_entry and now < cached_entry["expire_at"]:
-            return cached_entry["data"]
+            # Check cache
+            cached_entry = _weather_cache.get(cache_key)
+            if cached_entry is not None:
+                return cached_entry
 
-        # Request OpenWeather Assistant
-        url = "https://api.openweathermap.org/assistant/session"
-        headers = {"Content-Type": "application/json", "X-Api-Key": api_key}
-        data = json.dumps({"prompt": prompt}).encode("utf-8")
-        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-        
-        with urllib.request.urlopen(req, context=ctx, timeout=15) as response:
-            res_data = response.read()
-            json_res = json.loads(res_data)
+            # Request OpenWeather Assistant
+            url = "https://api.openweathermap.org/assistant/session"
+            headers = {"Content-Type": "application/json", "X-Api-Key": api_key}
+            response = await client.post(url, json={"prompt": prompt}, headers=headers)
+            json_res = response.json()
             
             if "answer" in json_res or json_res:
-                # Add the actual location string to the response so frontend can show it
-                if lat is not None and lon is not None and "loc_str" in locals() and loc_str:
+                if lat is not None and lon is not None and loc_str:
                     json_res["location"] = loc_str
                 
-                # Successfully retrieved data
-                _weather_cache[cache_key] = {"data": json_res, "expire_at": now + cache_ttl}
+                # Cache with user-configured TTL (TTLCache handles eviction)
+                _weather_cache[cache_key] = json_res
                 return json_res
-            elif cached_entry:
-                # AI didn't return proper data structure, fallback to stale cache
-                return cached_entry["data"]
                 
             return json_res
             
     except Exception as e:
-        if 'cached_entry' in locals() and cached_entry:
-            return cached_entry["data"]
+        # Try stale cache on error
+        cached = _weather_cache.get(cache_key)
+        if cached is not None:
+            return cached
         raise HTTPException(status_code=500, detail=f"Lỗi khi lấy thông tin thời tiết: {str(e)}")
 
 
 # ══════════════════════════════════════════════════════════
 # ── Zalo Webhook (Inbound) ────────────────────────────────
 # ══════════════════════════════════════════════════════════
-
-import logging
-from time import time as time_now
-from fastapi import BackgroundTasks, Request
-import httpx
 
 _webhook_logger = logging.getLogger(__name__)
 

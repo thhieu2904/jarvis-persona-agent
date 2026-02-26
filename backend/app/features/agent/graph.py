@@ -160,10 +160,7 @@ def build_agent_graph():
 
             try:
                 logger.info(f"Calling tool: {tc['name']} with args: {tc['args']}")
-                if asyncio.iscoroutinefunction(tool_fn.func):
-                    result = await tool_fn.ainvoke(args)
-                else:
-                    result = await tool_fn.ainvoke(args)
+                result = await tool_fn.ainvoke(args)
                 logger.info(f"Tool {tc['name']} returned ({len(str(result))} chars)")
             except Exception as e:
                 logger.error(f"Tool {tc['name']} error: {e}")

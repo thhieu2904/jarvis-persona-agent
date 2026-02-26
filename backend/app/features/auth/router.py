@@ -60,3 +60,29 @@ async def update_profile(
     """Cập nhật thông tin profile."""
     service = AuthService(db)
     return await service.update_profile(user_id, data.model_dump())
+
+
+@router.post("/refresh", response_model=LoginResponse)
+async def refresh_token(
+    user_id: str = Depends(get_current_user_id),
+    db: Client = Depends(get_db),
+):
+    """Gia hạn JWT token. Gọi khi token sắp hết hạn.
+    
+    Requires: valid Bearer token in Authorization header.
+    Returns: new access_token with fresh expiry.
+    """
+    from uuid import UUID
+    from app.core.security import create_access_token
+
+    # Verify user still exists
+    result = db.table("users").select("*").eq("id", user_id).single().execute()
+    if not result.data:
+        raise HTTPException(status_code=401, detail="Tài khoản không tồn tại")
+
+    new_token = create_access_token(UUID(user_id))
+    return {
+        "access_token": new_token,
+        "token_type": "bearer",
+        "user": UserResponse(**result.data),
+    }

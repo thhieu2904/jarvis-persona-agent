@@ -173,11 +173,15 @@ def search_study_materials(
     }, ensure_ascii=False)
 
 
-import threading
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from app.core.database import get_supabase_client
 
+# Thread pool for background document processing (RAG pipeline)
+_doc_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="rag_pipeline")
+
 @tool
-def save_temp_document_to_knowledge_base(
+async def save_temp_document_to_knowledge_base(
     storage_path: str,
     domain: Literal['study', 'work', 'personal', 'other'],
     user_id: Annotated[str, InjectedToolArg] = "",
@@ -222,21 +226,16 @@ def save_temp_document_to_knowledge_base(
         # 3. Tải nội dung bytes về để chạy RAG
         file_res = db.storage.from_("knowledge-base").download(new_path)
         
-        # 4. Kích hoạt Background Task chạy RAG (Chunking + Embedding) bằng Thread
-        # Sử dụng threading để không block tool chạy trả kết quả cho Agent
+        # 4. Kích hoạt Background Task chạy RAG (Chunking + Embedding)
+        # Dùng ThreadPoolExecutor thay vì bare threading.Thread cho lifecycle management tốt hơn
         from app.background.document_tasks import process_document_pipeline
         
-        def run_pipeline():
-            process_document_pipeline(
-                material_id=material_id, 
-                user_id=user_id, 
-                file_bytes=file_res, 
-                filename=file_name,
-                content_type=content_type
-            )
-            
-        thread = threading.Thread(target=run_pipeline, daemon=True)
-        thread.start()
+        loop = asyncio.get_event_loop()
+        loop.run_in_executor(
+            _doc_executor,
+            process_document_pipeline,
+            material_id, user_id, file_res, file_name, content_type,
+        )
         
         return json.dumps({
             "status": "success",

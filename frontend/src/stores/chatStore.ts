@@ -14,7 +14,11 @@ interface ChatState {
 
   loadSessions: () => Promise<void>;
   setActiveSession: (sessionId: string) => Promise<void>;
-  sendMessage: (message: string, images?: File[], displayMessage?: string) => Promise<void>;
+  sendMessage: (
+    message: string,
+    images?: File[],
+    displayMessage?: string,
+  ) => Promise<void>;
   stopStreaming: () => void;
   startNewChat: () => void;
   deleteSession: (sessionId: string) => Promise<void>;
@@ -60,7 +64,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  sendMessage: async (message: string, images?: File[], displayMessage?: string) => {
+  sendMessage: async (
+    message: string,
+    images?: File[],
+    displayMessage?: string,
+  ) => {
     const { activeSessionId, messages } = get();
 
     // Optimistic: add user message immediately (with local preview)
@@ -181,12 +189,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const aiFinalMsg = updatedMessages.find((m) => m.id === aiMsgId);
       const toolsUsed = aiFinalMsg?.tools_used || [];
       const relatedTools = [
+        // Tasks
         "create_task",
         "update_task",
         "delete_task",
-        "create_note",
+        "complete_task",
+        // Notes
+        "save_quick_note",
         "update_note",
         "delete_note",
+        // Calendar
+        "create_event",
+        "update_event",
+        "delete_event",
       ];
       const shouldRefresh = toolsUsed.some((tool) =>
         relatedTools.includes(tool),

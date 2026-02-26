@@ -16,58 +16,82 @@ export const chatService = {
     data: ChatRequest,
     signal: AbortSignal,
     onEvent: (eventRaw: string) => void,
+    maxRetries: number = 2,
   ): Promise<void> {
     const API_BASE =
       import.meta.env.VITE_API_URL || "http://localhost:8000/api";
     const token = localStorage.getItem("token");
 
-    const response = await fetch(`${API_BASE}/agent/chat`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify(data),
-      signal,
-    });
+    let attempt = 0;
+    while (attempt <= maxRetries) {
+      try {
+        const response = await fetch(`${API_BASE}/agent/chat`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(data),
+          signal,
+        });
 
-    if (!response.ok) {
-      if (response.status === 401) {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        window.location.href = "/login";
-      }
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+        if (!response.ok) {
+          if (response.status === 401) {
+            localStorage.removeItem("token");
+            localStorage.removeItem("user");
+            window.location.href = "/login";
+          }
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
 
-    if (!response.body) throw new Error("No response body");
+        if (!response.body) throw new Error("No response body");
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder("utf-8");
-    let buffer = "";
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let buffer = "";
 
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
+            buffer += decoder.decode(value, { stream: true });
 
-        const lines = buffer.split("\n\n");
-        // Keep the last partial chunk in the buffer
-        buffer = lines.pop() || "";
+            const lines = buffer.split("\n\n");
+            // Keep the last partial chunk in the buffer
+            buffer = lines.pop() || "";
 
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const jsonStr = line.substring(6).trim();
-            if (jsonStr) {
-              onEvent(jsonStr);
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                const jsonStr = line.substring(6).trim();
+                if (jsonStr) {
+                  onEvent(jsonStr);
+                }
+              }
             }
           }
+        } finally {
+          reader.releaseLock();
         }
+
+        // If we reach here, stream completed successfully
+        return;
+      } catch (err: unknown) {
+        // Don't retry on user abort or HTTP errors
+        if (
+          err instanceof Error &&
+          (err.name === "AbortError" || err.message.startsWith("HTTP error"))
+        ) {
+          throw err;
+        }
+        attempt++;
+        if (attempt > maxRetries) {
+          throw err;
+        }
+        // Wait 1s before retrying on network errors
+        await new Promise((r) => setTimeout(r, 1000));
+        console.warn(`SSE stream retry attempt ${attempt}/${maxRetries}`);
       }
-    } finally {
-      reader.releaseLock();
     }
   },
 
