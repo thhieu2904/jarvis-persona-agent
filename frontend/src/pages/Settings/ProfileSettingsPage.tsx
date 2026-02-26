@@ -292,11 +292,7 @@ function SystemConfig() {
             Ngôn ngữ JARVIS ưu tiên khi trả lời.
           </div>
         </div>
-        <select
-          className={styles.field}
-          style={{ width: "auto", margin: 0, padding: "6px 12px" }}
-          disabled
-        >
+        <select className={styles.selectSimple} disabled>
           <option>Tiếng Việt</option>
         </select>
       </div>
@@ -309,11 +305,8 @@ function SystemConfig() {
           </div>
         </div>
         <select
-          className={styles.field}
+          className={styles.selectSimple}
           style={{
-            width: "auto",
-            margin: 0,
-            padding: "6px 12px",
             opacity: updating ? 0.5 : 1,
             cursor: updating ? "wait" : "pointer",
           }}
@@ -324,6 +317,75 @@ function SystemConfig() {
           <option value="Đầy đủ (Chi tiết)">Đầy đủ (Chi tiết)</option>
           <option value="Ngắn gọn (Tóm tắt)">Ngắn gọn (Tóm tắt)</option>
         </select>
+      </div>
+
+      <div className={styles.toggleRow}>
+        <div>
+          <div className={styles.toggleLabel}>
+            Cho phép người khác nhắn Zalo
+          </div>
+          <div className={styles.toggleDesc}>
+            Khi bật, bất kỳ ai nhắn tin cho Bot Zalo đều được JARVIS phản hồi
+            (dùng khi demo). Khi tắt, chỉ chủ sở hữu mới được phản hồi.
+          </div>
+        </div>
+        <label
+          style={{
+            position: "relative",
+            display: "inline-block",
+            width: 44,
+            height: 24,
+            flexShrink: 0,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={!!user?.agent_config?.zalo_public_access}
+            onChange={async (e) => {
+              setUpdating(true);
+              try {
+                await updateAgentConfig({
+                  ...(user?.agent_config || {}),
+                  zalo_public_access: e.target.checked,
+                });
+              } finally {
+                setUpdating(false);
+              }
+            }}
+            disabled={updating}
+            style={{
+              opacity: 0,
+              width: 0,
+              height: 0,
+              position: "absolute",
+            }}
+          />
+          <span
+            style={{
+              position: "absolute",
+              cursor: updating ? "wait" : "pointer",
+              inset: 0,
+              backgroundColor: user?.agent_config?.zalo_public_access
+                ? "var(--blue-500, #3b82f6)"
+                : "#cbd5e1",
+              borderRadius: 24,
+              transition: "background-color 0.2s",
+            }}
+          >
+            <span
+              style={{
+                position: "absolute",
+                height: 18,
+                width: 18,
+                left: user?.agent_config?.zalo_public_access ? 22 : 3,
+                bottom: 3,
+                backgroundColor: "white",
+                borderRadius: "50%",
+                transition: "left 0.2s",
+              }}
+            />
+          </span>
+        </label>
       </div>
     </div>
   );
