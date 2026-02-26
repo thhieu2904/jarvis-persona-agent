@@ -19,6 +19,49 @@ from app.features.academic.schemas import WeekTimetable
 VN_TZ = timezone(timedelta(hours=7))
 
 
+def _period_to_time(start_period: int, num_periods: int) -> str:
+    """Convert TVU period number + count to a human-readable time range.
+
+    TVU schedule rules:
+      - Morning session : period  1–5,  starts 07:00
+      - Afternoon session: period  6–10, starts 13:00
+      - Each period = 45 min
+      - Break of 30 min after the 2nd period within each session
+          Morning  : after period 2  (08:30 – 09:00)
+          Afternoon: after period 7  (14:30 – 15:00)
+
+    Examples:
+      (1, 4) → "07:00–10:30"   (tiết 1-4 sáng, 2 tiết + nghỉ + 2 tiết)
+      (1, 5) → "07:00–11:15"   (tiết 1-5 sáng)
+      (6, 4) → "13:00–16:30"   (tiết 6-9 chiều)
+      (6, 5) → "13:00–17:15"   (tiết 6-10 chiều)
+    """
+    PERIOD_MIN = 45
+    BREAK_MIN  = 30
+
+    def _offset(pos_in_session: int) -> int:
+        """Minutes from session start to the START of period `pos_in_session` (1-based)."""
+        if pos_in_session <= 2:
+            return (pos_in_session - 1) * PERIOD_MIN
+        # Break inserted after position 2
+        return 2 * PERIOD_MIN + BREAK_MIN + (pos_in_session - 3) * PERIOD_MIN
+
+    if start_period <= 5:
+        session_start = 7 * 60   # 07:00
+        pos = start_period
+    else:
+        session_start = 13 * 60  # 13:00
+        pos = start_period - 5
+
+    start_min = session_start + _offset(pos)
+    end_min   = session_start + _offset(pos + num_periods - 1) + PERIOD_MIN
+
+    def _fmt(m: int) -> str:
+        return f"{m // 60:02d}:{m % 60:02d}"
+
+    return f"{_fmt(start_min)}–{_fmt(end_min)}"
+
+
 def _find_current_week_index(weeks: list[WeekTimetable], target: date) -> int:
     """Return the index of the week containing `target` date.
     
@@ -48,34 +91,52 @@ def _find_current_week_index(weeks: list[WeekTimetable], target: date) -> int:
     return 0  # Fallback: first week
 
 
-def _format_weeks(weeks: list[WeekTimetable], start_index: int, max_weeks: int = 3) -> str:
-    """Format a window of weeks into a compact string for the LLM.
-    
-    Skips empty weeks (no slots) but still counts them toward max_weeks
-    so we don't scan the entire semester looking for non-empty weeks.
+def _format_weeks(weeks: list[WeekTimetable], start_index: int, max_weeks: int = 4) -> str:
+    """Format a window of weeks into a compact string for the LLM / vector search.
+
+    Window layout: 1 tuần trước + tuần hiện tại + 2 tuần tiếp theo (4 tuần tổng).
+    - Tuần trước: context pattern (tuần nặng/nhẹ, so sánh)
+    - Tuần hiện tại: hành động ngay hôm nay
+    - 2 tuần tiếp: lập kế hoạch, cảnh báo deadline
+
+    Empty weeks (nghỉ lễ/Tết) vẫn hiển thị trong phần forward (tương lai)
+    nhưng KHÔNG tính vào slot khi tìm tuần trước — tìm lùi đến tuần có slot.
     """
+    day_map = {2: "Thứ 2", 3: "Thứ 3", 4: "Thứ 4", 5: "Thứ 5", 6: "Thứ 6", 7: "Thứ 7", 8: "CN"}
     result = ""
+
+    def _render_week(w: WeekTimetable, label: str = "") -> str:
+        header_label = f" [{label}]" if label else ""
+        if not w.slots:
+            return f"Tuần {w.week_number}{header_label} ({w.start_date} - {w.end_date}): Không có lịch học\n\n"
+        out = f"Tuần {w.week_number}{header_label} ({w.start_date} - {w.end_date}):\n"
+        for s in w.slots:
+            end_period = s.start_period + s.num_periods - 1
+            cancelled = " [NGHỈ]" if s.is_cancelled else ""
+            day_label = day_map.get(s.day_of_week, f"Thứ {s.day_of_week}")
+            class_info = f" | Lớp: {s.class_name}" if s.class_name else ""
+            time_range = _period_to_time(s.start_period, s.num_periods)
+            out += (
+                f"  {day_label} | {time_range} (Tiết {s.start_period}-{end_period}) | "
+                f"{s.subject_name} | Phòng {s.room} | "
+                f"GV: {s.lecturer}{class_info}{cancelled}\n"
+            )
+        out += "\n"
+        return out
+
+    # ── Tuần trước: tìm lùi đến tuần gần nhất có slot (bỏ qua tuần trống) ──
+    prev_index = start_index - 1
+    while prev_index >= 0 and not weeks[prev_index].slots:
+        prev_index -= 1
+    if prev_index >= 0:
+        result += _render_week(weeks[prev_index], "TUẦN TRƯỚC")
+
+    # ── Tuần hiện tại + các tuần tới (forward window) ────────────────────────
     shown = 0
     i = start_index
-
-    while i < len(weeks) and shown < max_weeks:
-        w = weeks[i]
-        if not w.slots:
-            # Still count this as part of the window, but note it's empty
-            result += f"Tuần {w.week_number} ({w.start_date} - {w.end_date}): Không có lịch học\n\n"
-        else:
-            day_map = {2: "Thứ 2", 3: "Thứ 3", 4: "Thứ 4", 5: "Thứ 5", 6: "Thứ 6", 7: "Thứ 7", 8: "CN"}
-            result += f"Tuần {w.week_number} ({w.start_date} - {w.end_date}):\n"
-            for s in w.slots:
-                end_period = s.start_period + s.num_periods - 1
-                cancelled = " [NGHỈ]" if s.is_cancelled else ""
-                day_label = day_map.get(s.day_of_week, f"Thứ {s.day_of_week}")
-                result += (
-                    f"  {day_label} | Tiết {s.start_period}-{end_period} | "
-                    f"{s.subject_name} | Phòng {s.room} | "
-                    f"GV: {s.lecturer}{cancelled}\n"
-                )
-            result += "\n"
+    while i < len(weeks) and shown < (max_weeks - 1):  # -1 vì đã dùng 1 slot cho tuần trước
+        label = "TUẦN NÀY" if shown == 0 else ""
+        result += _render_week(weeks[i], label)
         shown += 1
         i += 1
 
@@ -135,8 +196,9 @@ async def get_timetable(
     """Lấy thời khóa biểu (TKB) / lịch học theo tuần.
     Dùng khi sinh viên hỏi về lịch học, thời gian học, phòng học, hoặc giảng viên.
 
-    Trả về window 3 tuần: tuần chứa `target_date` (hoặc tuần hiện tại nếu không truyền)
-    và 2 tuần tiếp theo. Chỉ truyền semester_id khi muốn xem HK khác với HK hiện tại.
+    Trả về window 4 tuần: 1 tuần trước + tuần chứa `target_date` (hoặc tuần hiện tại) + 2 tuần tiếp.
+    Tuần trước giúp agent nhận diện pattern, so sánh, và trả lời query về tuần vừa qua.
+    Chỉ truyền semester_id khi muốn xem HK khác với HK hiện tại.
 
     Args:
         semester_id: Mã học kỳ (vd: 20252). Nếu None thì lấy HK hiện tại.
@@ -146,7 +208,7 @@ async def get_timetable(
                         3=lớp, 4=môn học, 6=khoa quản lý sinh viên.
 
     Returns:
-        Thời khóa biểu 3 tuần: thứ, tiết, môn, phòng, giảng viên.
+        Thời khóa biểu 4 tuần (1 trước + hiện tại + 2 tiếp): thứ, tiết, môn, phòng, lớp, giảng viên.
     """
     try:
         service = AcademicService(get_db())
@@ -166,8 +228,9 @@ async def get_timetable(
             pivot = datetime.now(VN_TZ).date()
 
         start_index = _find_current_week_index(weeks, pivot)
-        header = f"Ngày tra cứu: {pivot.strftime('%d/%m/%Y')} | Tổng số tuần trong HK: {len(weeks)}\n\n"
-        body = _format_weeks(weeks, start_index, max_weeks=3)
+        header = f"Ngày tra cứu: {pivot.strftime('%d/%m/%Y')} | Tổng số tuần trong HK: {len(weeks)}\n"
+        header += "Cửa sổ: 1 tuần trước + tuần hiện tại + 2 tuần tiếp theo\n\n"
+        body = _format_weeks(weeks, start_index, max_weeks=4)
 
         return header + (body if body else "Không có lịch học trong khoảng thời gian này.")
 
