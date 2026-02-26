@@ -29,6 +29,7 @@ class ChatRequest(BaseModel):
     session_id: str | None = None
     images: list[str] | None = None  # Public URLs from Supabase Storage
     user_location: str | None = None  # Location string for context
+    display_message: str | None = None  # Clean version for DB/UI (strips SYS_FILE blocks)
 
 
 class UploadResponse(BaseModel):
@@ -140,8 +141,8 @@ async def chat(
     human_content = _build_multimodal_content(data.message, data.images)
     trimmed_history.append(HumanMessage(content=human_content))
 
-    # 5. Save user message to DB (Markdown format for UI rendering)
-    db_content = _build_db_content(data.message, data.images)
+    # 5. Save user message to DB (use display_message if provided to avoid storing raw SYS_FILE dumps)
+    db_content = _build_db_content(data.display_message or data.message, data.images)
     memory.save_message(session_id, "user", db_content)
 
     # 5b. Get user location preferences

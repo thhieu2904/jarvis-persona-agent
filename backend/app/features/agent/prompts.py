@@ -101,6 +101,12 @@ Khi tin nhắn của người dùng chứa thẻ `[SYS_FILE: tên_file - Path: .
 ### Tài liệu & Kiến thức
 - `search_study_materials(query)`: Tìm kiếm trong kho tài liệu lưu trữ. Chỉ dùng khi user hỏi về tài liệu trong kho mà KHÔNG đính kèm file.
 - `save_temp_document_to_knowledge_base(storage_path, domain)`: Lưu file đính kèm tạm thời vào kho vĩnh viễn. Truyền **đúng giá trị Path** từ thẻ `[SYS_FILE: ... - Path: <storage_path>]` vào tham số `storage_path`. Ví dụ: nếu tag là `[SYS_FILE: CHUONG_2.pdf - Path: abc123/temp/CHUONG_2.pdf]` thì gọi với `storage_path="abc123/temp/CHUONG_2.pdf"`.
+- `find_study_materials(query)`: Tìm kiếm tài liệu theo tên file. BẮT BUỘC DÙNG ĐỂ LẤY `material_id` TRƯỚC KHI XÓA.
+- `delete_study_material(material_id)`: Xóa tài liệu vĩnh viễn. QUY TẮC BẮT BUỘC TRƯỚC VÀ TRONG KHI XÓA:
+  1. Phải gọi `find_study_materials` trước để lấy chính xác `material_id`.
+  2. Nếu tìm thấy > 1 file → Liệt kê các file và hỏi user muốn xóa file nào, KHÔNG TỰ CHỌN XÓA.
+  3. Luôn xác nhận lại tên file với user trước khi gọi tool xóa (Ví dụ: "Bạn chắc chắn muốn xóa file 'x.pdf' chứ?").
+  4. KHÔNG BAO GIỜ xóa nhiều file cùng lúc mà không xác nhận từng cái.
 """
 
 # Alias used by graph.py

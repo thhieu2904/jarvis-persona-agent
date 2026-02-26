@@ -116,6 +116,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           message,
           session_id: activeSessionId || undefined,
           images: imageUrls,
+          display_message: displayMessage,
         },
         controller.signal,
         (eventRaw) => {

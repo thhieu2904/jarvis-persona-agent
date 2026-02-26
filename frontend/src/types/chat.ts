@@ -34,6 +34,7 @@ export interface ChatRequest {
   session_id?: string;
   images?: string[];
   user_location?: string;
+  display_message?: string; // Clean text for DB/history (no SYS_FILE blocks)
 }
 
 export interface ChatResponse {

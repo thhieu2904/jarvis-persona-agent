@@ -272,14 +272,16 @@ async def get_study_materials(user_id: str = Depends(get_current_user_id)):
 
 
 @router.delete("/{material_id}")
-async def delete_study_material(
+async def delete_study_material_endpoint(
+    background_tasks: BackgroundTasks,
     material_id: str,
     user_id: str = Depends(get_current_user_id)
 ):
     """
     Xóa tài liệu khỏi Knowledge Base.
-    - Xóa metadata trong DB (Cascasde xóa luôn Vector Embeddings).
     - Xóa dọn file gốc trên Supabase S3 (Storage) để tránh rác.
+    - Xóa metadata trong DB (Cascasde xóa luôn Vector Embeddings).
+    Thực hiện dưới dạng Background Task để tránh block API.
     """
     db = get_supabase_client()
     try:
@@ -290,18 +292,19 @@ async def delete_study_material(
             
         storage_path = res.data[0].get("file_url")
         
-        # 1. Xóa trên DB (Cascade vật lý)
-        db.table("study_materials").delete().eq("id", material_id).eq("user_id", user_id).execute()
-        
-        # 2. Dọn rác S3
-        if storage_path and not storage_path.startswith("http"):
-             db.storage.from_("knowledge-base").remove([storage_path])
+        # Add to background tasks
+        from app.background.document_tasks import delete_document_pipeline
+        background_tasks.add_task(
+            delete_document_pipeline,
+            material_id=material_id,
+            file_url=storage_path,
+            user_id=user_id
+        )
              
-        return {"status": "success", "message": "Material and associated storage clean up successfully."}
+        return {"status": "success", "message": "Material deletion started in background."}
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error deleting material: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to delete material: {str(e)}")
-
+        logger.error(f"Error initiating material deletion: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to initiate material deletion: {str(e)}")
 

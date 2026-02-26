@@ -129,3 +129,31 @@ def process_document_pipeline(material_id: str, user_id: str, file_bytes: bytes,
         db.table("study_materials").update({
             "processing_status": "failed"
         }).eq("id", material_id).execute()
+
+
+def delete_document_pipeline(material_id: str, file_url: str | None, user_id: str):
+    """
+    Background task to delete a document:
+    1. Delete file from S3 (if file_url exists)
+    2. Delete record from DB (which cascades to material_chunks)
+    """
+    db = get_supabase_client()
+    logger.info(f"🗑️ Starting background deletion for material_id: {material_id}")
+    
+    try:
+        # 1. Delete from S3
+        if file_url and not file_url.startswith("http"):
+             try:
+                 db.storage.from_("knowledge-base").remove([file_url])
+                 logger.info(f"✅ Removed file from S3: {file_url}")
+             except Exception as e:
+                 logger.warning(f"⚠️ Could not remove file {file_url} from S3: {e}")
+                 # Continue to DB deletion even if S3 fails (e.g. file already deleted or ghost file)
+        
+        # 2. Delete from DB (CASCADE will delete material_chunks)
+        db.table("study_materials").delete().eq("id", material_id).eq("user_id", user_id).execute()
+        logger.info(f"✅ Successfully deleted material {material_id} from DB.")
+
+    except Exception as e:
+        logger.error(f"❌ Failed to delete material {material_id}: {str(e)}")
+

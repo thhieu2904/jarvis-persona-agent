@@ -252,5 +252,98 @@ def save_temp_document_to_knowledge_base(
         }, ensure_ascii=False)
 
 
+
+@tool
+def find_study_materials(
+    query: str,
+    user_id: Annotated[str, InjectedToolArg] = "",
+) -> str:
+    """Tìm kiếm tài liệu trong kho Knowledge Base theo tên file.
+    Dùng trước khi xóa tài liệu để lấy material_id chính xác.
+    Cũng dùng khi user hỏi "Tôi đã có những tài liệu gì?" hoặc "Kiểm tra xem có file X chưa?".
+    
+    Args:
+        query: Từ khóa tên file cần tìm. VD: "PHP", "Express", "giải tích".
+    
+    Returns:
+        Danh sách tài liệu khớp, mỗi item có material_id, file_name, domain, status.
+    """
+    db = get_supabase_client()
+    res = (
+        db.table("study_materials")
+        .select("id, file_name, domain, processing_status, created_at")
+        .eq("user_id", user_id)
+        .ilike("file_name", f"%{query}%")
+        .limit(10)
+        .execute()
+    )
+    materials = [
+        {
+            "material_id": r["id"],
+            "file_name": r["file_name"],
+            "domain": r["domain"],
+            "status": r["processing_status"],
+        }
+        for r in (res.data or [])
+    ]
+    return json.dumps({
+        "found": len(materials),
+        "materials": materials,
+    }, ensure_ascii=False)
+
+
+@tool
+def delete_study_material(
+    material_id: str,
+    user_id: Annotated[str, InjectedToolArg] = "",
+) -> str:
+    """Xóa vĩnh viễn một tài liệu khỏi Knowledge Base.
+    Xóa file trên S3, xóa record trong DB, xóa toàn bộ vector embeddings liên quan.
+    QUAN TRỌNG: Luôn gọi find_study_materials trước để lấy material_id chính xác.
+    Luôn xác nhận với user tên file trước khi gọi tool này.
+    
+    Args:
+        material_id: UUID của tài liệu, lấy từ kết quả find_study_materials.
+    
+    Returns:
+        Kết quả xóa.
+    """
+    db = get_supabase_client()
+    
+    # 1. Ownership check + lấy file_url
+    res = (
+        db.table("study_materials")
+        .select("file_name, file_url")
+        .eq("id", material_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    if not res.data:
+        return json.dumps({"status": "error", "message": "Không tìm thấy tài liệu hoặc bạn không có quyền xóa."}, ensure_ascii=False)
+    
+    file_name = res.data[0]["file_name"]
+    file_url = res.data[0].get("file_url")
+    
+    # Synchronous delete so agent can report real success/failure
+    # S3 first → DB only if S3 succeeds (avoids orphan files)
+    db2 = get_supabase_client()
+    if file_url and not file_url.startswith("http"):
+        try:
+            db2.storage.from_("knowledge-base").remove([file_url])
+        except Exception as e:
+            return json.dumps({
+                "status": "error",
+                "message": f"Lỗi khi xóa file '{file_name}' trên hệ thống lưu trữ: {str(e)}. Chưa xóa dữ liệu, vui lòng thử lại.",
+            }, ensure_ascii=False)
+    
+    # S3 deleted → now delete DB (CASCADE removes material_chunks)
+    db2.table("study_materials").delete().eq("id", material_id).eq("user_id", user_id).execute()
+    
+    return json.dumps({
+        "status": "success",
+        "message": f"Đã xóa hoàn toàn tài liệu '{file_name}' khỏi kho kiến thức. AI đã quên nội dung tài liệu này.",
+    }, ensure_ascii=False)
+
+
 # Export all knowledge tools for the agent graph
-knowledge_tools = [search_memories, save_memory, search_study_materials, save_temp_document_to_knowledge_base]
+knowledge_tools = [search_memories, save_memory, search_study_materials, save_temp_document_to_knowledge_base, find_study_materials, delete_study_material]
