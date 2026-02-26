@@ -69,3 +69,46 @@ class SemesterGrades(BaseModel):
     credits_earned: str
     classification: str       # "Giỏi", "Khá", "Xuất sắc"
     courses: list[GradeEntry]
+
+
+# ── Phase 2: New models ─────────────────────────────
+
+class StudentInfo(BaseModel):
+    """Student personal information from w-locsinhvieninfo."""
+    mssv: str
+    full_name: str
+    date_of_birth: str
+    gender: str
+    class_name: str           # Lớp (e.g. "DA24KTB")
+    department: str           # Khoa (e.g. "Trường Kinh tế, Luật")
+    major: str                # Ngành (e.g. "Kế toán")
+    education_level: str      # Bậc hệ đào tạo (e.g. "đại học")
+    email: str
+    phone: str
+    advisor_name: str         # Cố vấn học tập
+    advisor_email: str
+    advisor_phone: str
+    status: str               # Hiện diện (e.g. "Đang học")
+    semester_start: str       # HK vào (e.g. "Học kỳ 1 Năm học 2024-2025")
+    semester_end: str         # HK ra dự kiến
+
+
+class TuitionSemester(BaseModel):
+    """Tuition info for one semester from w-locdstonghophocphisv."""
+    semester_code: int        # nhhk (e.g. 20251)
+    semester_name: str        # ten_hoc_ky
+    tuition: str              # hoc_phi
+    discount: str             # mien_giam
+    amount_due: str           # phai_thu
+    amount_paid: str          # da_thu
+    remaining: str            # con_no
+    unit_price: str           # don_gia (per credit)
+
+
+class SemesterCourseResult(BaseModel):
+    """A course result from w-inketquahoctap (single semester)."""
+    subject_code: str         # ma_doi_tuong
+    subject_name: str         # ten_doi_tuong
+    credits: float            # diem_trung_binh1 (so_tin_chi in this API)
+    score: float              # diem_trung_binh2 (điểm/10)
+

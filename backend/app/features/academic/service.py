@@ -13,6 +13,9 @@ from app.features.academic.schemas import (
     WeekTimetable,
     GradeEntry,
     SemesterGrades,
+    StudentInfo,
+    TuitionSemester,
+    SemesterCourseResult,
 )
 
 
@@ -120,7 +123,34 @@ class AcademicService:
     # ── Cache Layer ──────────────────────────────────────
 
     async def _get_cached(self, user_id: str, data_type: str, semester: str | None = None) -> dict | None:
-        """Get cached data if fresh (within TTL)."""
+        """Get cached data if fresh (within TTL).
+        
+        TTL is resolved per-user from agent_config.cache_ttl_hours,
+        falling back to global SCHOOL_CACHE_TTL_HOURS.
+        TTL of 0 means caching is disabled (always fetch fresh).
+        """
+        # Resolve per-user TTL
+        ttl_hours = self.settings.SCHOOL_CACHE_TTL_HOURS  # Global default
+        try:
+            user_row = (
+                self.db.table("users")
+                .select("agent_config")
+                .eq("id", user_id)
+                .single()
+                .execute()
+            )
+            if user_row.data:
+                config = user_row.data.get("agent_config") or {}
+                user_ttl = config.get("cache_ttl_hours")
+                if user_ttl is not None:
+                    ttl_hours = int(user_ttl)
+        except Exception:
+            pass  # Fallback to global default
+        
+        # TTL = 0 means no caching
+        if ttl_hours == 0:
+            return None
+
         query = (
             self.db.table("academic_sync_cache")
             .select("*")
@@ -137,7 +167,7 @@ class AcademicService:
 
         record = result.data[0]
         last_synced = datetime.fromisoformat(record["last_synced_at"])
-        ttl = timedelta(hours=self.settings.SCHOOL_CACHE_TTL_HOURS)
+        ttl = timedelta(hours=ttl_hours)
 
         if datetime.now(timezone.utc) - last_synced < ttl:
             return record["raw_data"]
@@ -252,6 +282,87 @@ class AcademicService:
 
         return self._parse_grades(raw_semesters)
 
+    # ── Phase 2: New Data Access Methods ─────────────────
+
+    async def get_student_info(self, user_id: str) -> StudentInfo:
+        """Get student personal info. Cache-first, sync from school API if stale."""
+        cached = await self._get_cached(user_id, "student_info")
+        if cached and self._is_valid_response(cached):
+            raw = cached
+        else:
+            client = await self._get_authenticated_client(user_id)
+            try:
+                raw = await client.get_student_info()
+                if self._is_valid_response(raw):
+                    await self._update_cache(user_id, "student_info", raw)
+                else:
+                    raise ValueError(f"API trường trả lỗi: {raw.get('message', 'Unknown')}")
+            finally:
+                await client.close()
+
+        return self._parse_student_info(raw)
+
+    async def get_tuition_summary(self, user_id: str) -> list[TuitionSemester]:
+        """Get tuition fee summary. Cache-first."""
+        cached = await self._get_cached(user_id, "tuition")
+        if cached and self._is_valid_response(cached):
+            raw_semesters = cached.get("ds_hoc_phi_hoc_ky", [])
+        else:
+            client = await self._get_authenticated_client(user_id)
+            try:
+                data = await client.get_tuition_summary()
+                if self._is_valid_response(data):
+                    await self._update_cache(user_id, "tuition", data)
+                    raw_semesters = data.get("ds_hoc_phi_hoc_ky", [])
+                else:
+                    raise ValueError(f"API trường trả lỗi: {data.get('message', 'Unknown')}")
+            finally:
+                await client.close()
+
+        return self._parse_tuition(raw_semesters)
+
+    async def get_semester_result(
+        self, user_id: str, semester_id: int
+    ) -> list[SemesterCourseResult]:
+        """Get grades for a specific semester. Cache-first."""
+        cache_key = f"sem_result_{semester_id}"
+        cached = await self._get_cached(user_id, "semester_result", cache_key)
+        if cached and self._is_valid_response(cached):
+            raw_courses = cached.get("ds_du_lieu", [])
+        else:
+            client = await self._get_authenticated_client(user_id)
+            try:
+                data = await client.get_semester_result(semester_id)
+                if self._is_valid_response(data):
+                    await self._update_cache(user_id, "semester_result", data, cache_key)
+                    raw_courses = data.get("ds_du_lieu", [])
+                else:
+                    raise ValueError(f"API trường trả lỗi: {data.get('message', 'Unknown')}")
+            finally:
+                await client.close()
+
+        return self._parse_semester_result(raw_courses)
+
+    async def get_semester_timetable_overview(
+        self, user_id: str, semester_id: int
+    ) -> dict:
+        """Get semester-wide timetable overview. Returns raw data for tool formatting."""
+        cache_key = f"sem_tkb_{semester_id}"
+        cached = await self._get_cached(user_id, "semester_tkb_overview", cache_key)
+        if cached and self._is_valid_response(cached):
+            return cached
+        else:
+            client = await self._get_authenticated_client(user_id)
+            try:
+                data = await client.get_semester_timetable_overview(semester_id)
+                if self._is_valid_response(data):
+                    await self._update_cache(user_id, "semester_tkb_overview", data, cache_key)
+                    return data
+                else:
+                    raise ValueError(f"API trường trả lỗi: {data.get('message', 'Unknown')}")
+            finally:
+                await client.close()
+
     # ── Data Transformers ────────────────────────────────
 
     @staticmethod
@@ -315,3 +426,57 @@ class AcademicService:
                 courses=courses,
             ))
         return semesters
+
+    # ── Phase 2: New Transformers ────────────────────────
+
+    @staticmethod
+    def _parse_student_info(raw: dict) -> StudentInfo:
+        """Transform raw w-locsinhvieninfo data into StudentInfo."""
+        return StudentInfo(
+            mssv=raw.get("ma_sv", ""),
+            full_name=raw.get("ten_day_du", ""),
+            date_of_birth=raw.get("ngay_sinh", ""),
+            gender=raw.get("gioi_tinh", ""),
+            class_name=raw.get("lop", ""),
+            department=raw.get("khoa", ""),
+            major=raw.get("nganh", ""),
+            education_level=raw.get("bac_he_dao_tao", ""),
+            email=raw.get("email", ""),
+            phone=raw.get("dien_thoai", ""),
+            advisor_name=raw.get("ho_ten_cvht", ""),
+            advisor_email=raw.get("email_cvht", ""),
+            advisor_phone=raw.get("dien_thoai_cvht", ""),
+            status=raw.get("hien_dien_sv", ""),
+            semester_start=raw.get("str_nhhk_vao", ""),
+            semester_end=raw.get("str_nhhk_ra", ""),
+        )
+
+    @staticmethod
+    def _parse_tuition(raw_semesters: list) -> list[TuitionSemester]:
+        """Transform raw w-locdstonghophocphisv data into TuitionSemester list."""
+        result = []
+        for s in raw_semesters:
+            result.append(TuitionSemester(
+                semester_code=s.get("nhhk", 0),
+                semester_name=s.get("ten_hoc_ky", ""),
+                tuition=s.get("hoc_phi", "0"),
+                discount=s.get("mien_giam", "0"),
+                amount_due=s.get("phai_thu", "0"),
+                amount_paid=s.get("da_thu", "0"),
+                remaining=s.get("con_no", "0"),
+                unit_price=s.get("don_gia", "0"),
+            ))
+        return result
+
+    @staticmethod
+    def _parse_semester_result(raw_courses: list) -> list[SemesterCourseResult]:
+        """Transform raw w-inketquahoctap data into SemesterCourseResult list."""
+        result = []
+        for c in raw_courses:
+            result.append(SemesterCourseResult(
+                subject_code=c.get("ma_doi_tuong", ""),
+                subject_name=c.get("ten_doi_tuong", ""),
+                credits=c.get("diem_trung_binh1", 0),
+                score=c.get("diem_trung_binh2", 0),
+            ))
+        return result

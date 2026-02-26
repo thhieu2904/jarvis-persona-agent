@@ -295,5 +295,252 @@ async def get_grades(
         }, ensure_ascii=False)
 
 
+# ── Phase 2: New Tools ───────────────────────────────
+
+@tool
+async def get_student_info(
+    user_id: Annotated[str, InjectedToolArg] = "",
+) -> str:
+    """Lấy thông tin cá nhân sinh viên: khoa, lớp, ngành, email trường, SĐT, cố vấn học tập.
+    Dùng khi sinh viên hỏi về bản thân: "Tôi học khoa nào?", "Email trường tôi?", "CVHT tôi là ai?"
+
+    Returns:
+        Thông tin cá nhân: MSSV, tên, ngày sinh, lớp, khoa, ngành, email, SĐT, CVHT, trạng thái.
+    """
+    try:
+        service = AcademicService(get_db())
+        info = await service.get_student_info(user_id)
+
+        result = f"MSSV: {info.mssv}\n"
+        result += f"Họ tên: {info.full_name}\n"
+        result += f"Ngày sinh: {info.date_of_birth} | Giới tính: {info.gender}\n"
+        result += f"Lớp: {info.class_name}\n"
+        result += f"Ngành: {info.major} | Bậc: {info.education_level}\n"
+        result += f"Khoa: {info.department}\n"
+        result += f"Email: {info.email}\n"
+        result += f"SĐT: {info.phone}\n"
+        if info.advisor_name:
+            result += f"Cố vấn HT: {info.advisor_name}"
+            if info.advisor_email:
+                result += f" ({info.advisor_email})"
+            if info.advisor_phone:
+                result += f" - SĐT: {info.advisor_phone}"
+            result += "\n"
+        result += f"Trạng thái: {info.status}\n"
+        result += f"Khóa: {info.semester_start} → {info.semester_end}\n"
+
+        return result
+
+    except ValueError as e:
+        return json.dumps({
+            "status": "error",
+            "message": str(e),
+            "hint": "Chủ nhân cần kết nối tài khoản trường trước.",
+        }, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Lỗi khi lấy thông tin SV ({type(e).__name__}): {str(e)}",
+        }, ensure_ascii=False)
+
+
+@tool
+async def get_tuition_info(
+    user_id: Annotated[str, InjectedToolArg] = "",
+) -> str:
+    """Xem tình hình học phí / công nợ tất cả các kỳ.
+    Dùng khi sinh viên hỏi: "Tôi nợ học phí không?", "Học phí kỳ này bao nhiêu?", "Tổng đã đóng bao nhiêu?"
+
+    Returns:
+        Bảng học phí từng kỳ: phải thu, đã thu, còn nợ, đơn giá/tín chỉ.
+    """
+    try:
+        service = AcademicService(get_db())
+        semesters = await service.get_tuition_summary(user_id)
+
+        if not semesters:
+            return "Không có dữ liệu học phí."
+
+        total_due = 0
+        total_paid = 0
+        total_remaining = 0
+
+        result = f"Tổng: {len(semesters)} học kỳ\n\n"
+        for s in semesters:
+            due = int(s.amount_due) if s.amount_due.isdigit() else 0
+            paid = int(s.amount_paid) if s.amount_paid.isdigit() else 0
+            remaining = int(s.remaining) if s.remaining.isdigit() else 0
+            total_due += due
+            total_paid += paid
+            total_remaining += remaining
+
+            status_icon = "✅" if remaining == 0 else "⚠️"
+            result += f"{status_icon} {s.semester_name}\n"
+            result += f"  Phải thu: {due:,}đ | Đã thu: {paid:,}đ | Còn nợ: {remaining:,}đ\n"
+
+        result += f"\n--- Tổng kết ---\n"
+        result += f"Tổng phải thu: {total_due:,}đ\n"
+        result += f"Tổng đã thu: {total_paid:,}đ\n"
+        result += f"Tổng còn nợ: {total_remaining:,}đ\n"
+
+        return result
+
+    except ValueError as e:
+        return json.dumps({
+            "status": "error",
+            "message": str(e),
+            "hint": "Chủ nhân cần kết nối tài khoản trường trước.",
+        }, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Lỗi khi lấy học phí ({type(e).__name__}): {str(e)}",
+        }, ensure_ascii=False)
+
+
+@tool
+async def get_semester_grades(
+    semester_id: int,
+    user_id: Annotated[str, InjectedToolArg] = "",
+) -> str:
+    """Lấy kết quả học tập (điểm) của MỘT học kỳ cụ thể.
+    Nhẹ hơn get_grades (chỉ lấy 1 kỳ thay vì tất cả).
+    Dùng khi sinh viên hỏi: "Điểm kỳ này?", "Kỳ vừa rồi tôi được bao nhiêu điểm?"
+
+    Args:
+        semester_id: Mã học kỳ (vd: 20251). Nếu không biết, gọi get_semesters() trước.
+
+    Returns:
+        Danh sách môn học với số tín chỉ và điểm (hệ 10) trong học kỳ đó.
+    """
+    try:
+        service = AcademicService(get_db())
+        courses = await service.get_semester_result(user_id, semester_id)
+
+        if not courses:
+            return f"Không có dữ liệu điểm cho học kỳ {semester_id}."
+
+        total_credits = sum(c.credits for c in courses)
+        weighted_sum = sum(c.credits * c.score for c in courses)
+        gpa = weighted_sum / total_credits if total_credits > 0 else 0
+
+        result = f"Kết quả học kỳ {semester_id} ({len(courses)} môn, {total_credits:.0f} TC):\n"
+        result += f"ĐTB ước tính (hệ 10): {gpa:.2f}\n\n"
+
+        for c in courses:
+            result += f"  {c.subject_name} ({c.credits:.0f} TC): {c.score}/10\n"
+
+        return result
+
+    except ValueError as e:
+        return json.dumps({
+            "status": "error",
+            "message": str(e),
+            "hint": "Chủ nhân cần kết nối tài khoản trường trước.",
+        }, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Lỗi khi lấy điểm HK ({type(e).__name__}): {str(e)}",
+        }, ensure_ascii=False)
+
+
+@tool
+async def get_semester_timetable_overview(
+    semester_id: int | None = None,
+    user_id: Annotated[str, InjectedToolArg] = "",
+) -> str:
+    """Xem tổng quan thời khóa biểu CẢ học kỳ: danh sách các môn, số tín chỉ, giảng viên, phòng học.
+    Khác với get_timetable (xem theo tuần), tool này cho cái nhìn TOÀN CẢNH cả kỳ.
+    Dùng khi: "Kỳ này học mấy môn?", "Ai dạy môn X?", "Tổng bao nhiêu tín chỉ kỳ này?"
+
+    Args:
+        semester_id: Mã học kỳ (vd: 20251). Nếu None, gọi get_semesters() để lấy kỳ hiện tại trước.
+
+    Returns:
+        Danh sách môn trong kỳ: tên, TC, nhóm/tổ, GV, phòng, thứ, tiết, thời gian, lớp.
+    """
+    try:
+        service = AcademicService(get_db())
+
+        # Resolve semester if not provided
+        actual_semester = semester_id
+        if not actual_semester:
+            client = await service._get_authenticated_client(user_id)
+            try:
+                sdata = await client.get_semesters()
+                actual_semester = sdata.get("hoc_ky_theo_ngay_hien_tai")
+            finally:
+                await client.close()
+
+        if not actual_semester:
+            return "Không xác định được học kỳ hiện tại. Hãy truyền semester_id."
+
+        data = await service.get_semester_timetable_overview(user_id, int(actual_semester))
+        raw_classes = data.get("ds_nhom_to", [])
+
+        if not raw_classes:
+            return f"Không có dữ liệu TKB cho học kỳ {actual_semester}."
+
+        # Group by subject (ma_mon) to condense output
+        day_map = {2: "T2", 3: "T3", 4: "T4", 5: "T5", 6: "T6", 7: "T7", 8: "CN"}
+        subjects: dict = {}
+        for c in raw_classes:
+            key = c.get("ma_mon", "")
+            if key not in subjects:
+                subjects[key] = {
+                    "ten_mon": c.get("ten_mon", ""),
+                    "so_tc": c.get("so_tc", "?"),
+                    "nhom_to": c.get("nhom_to", ""),
+                    "gv": c.get("gv", ""),
+                    "lop": c.get("lop", ""),
+                    "sessions": [],
+                }
+            # Track unique sessions by (thu, tbd, phong, tkb)
+            session_key = (c.get("thu"), c.get("tbd"), c.get("phong"), c.get("tkb"))
+            if session_key not in [
+                (s["thu"], s["tbd"], s["phong"], s["tkb"])
+                for s in subjects[key]["sessions"]
+            ]:
+                subjects[key]["sessions"].append({
+                    "thu": c.get("thu"),
+                    "tbd": c.get("tbd"),
+                    "so_tiet": c.get("so_tiet"),
+                    "tu_gio": c.get("tu_gio", ""),
+                    "den_gio": c.get("den_gio", ""),
+                    "phong": c.get("phong", ""),
+                    "tkb": c.get("tkb", ""),
+                })
+
+        total_tc = sum(float(s["so_tc"]) for s in subjects.values() if s["so_tc"] != "?")
+        result = f"TKB tổng quan HK {actual_semester}: {len(subjects)} môn, ~{total_tc:.0f} TC\n\n"
+
+        for ma_mon, info in subjects.items():
+            result += f"• {info['ten_mon']} ({info['so_tc']} TC) | Nhóm: {info['nhom_to']} | GV: {info['gv']}\n"
+            for s in info["sessions"][:3]:  # Limit sessions shown
+                day_label = day_map.get(s["thu"], f"T{s['thu']}")
+                result += f"  {day_label} tiết {s['tbd']} ({s['tu_gio']}-{s['den_gio']}) P.{s['phong']} [{s['tkb']}]\n"
+            if len(info["sessions"]) > 3:
+                result += f"  ... và {len(info['sessions']) - 3} buổi khác\n"
+
+        return result
+
+    except ValueError as e:
+        return json.dumps({
+            "status": "error",
+            "message": str(e),
+            "hint": "Chủ nhân cần kết nối tài khoản trường trước.",
+        }, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Lỗi khi lấy TKB tổng quan ({type(e).__name__}): {str(e)}",
+        }, ensure_ascii=False)
+
+
 # Export all tools for the agent graph
-academic_tools = [get_semesters, get_timetable, get_grades]
+academic_tools = [
+    get_semesters, get_timetable, get_grades,
+    get_student_info, get_tuition_info,
+    get_semester_grades, get_semester_timetable_overview,
+]

@@ -25,7 +25,7 @@ from app.features.agent.prompts import build_system_prompt
 logger = logging.getLogger(__name__)
 
 # Import tools
-from app.features.academic.tools import get_timetable, get_grades, get_semesters
+from app.features.academic.tools import academic_tools
 from app.features.tasks.tools import create_task, list_tasks, update_task, complete_task, delete_task
 from app.features.notes.tools import save_quick_note, search_notes, list_notes, update_note, delete_note
 from app.features.calendar.tools import create_event, get_events, update_event, delete_event
@@ -51,8 +51,8 @@ class AgentState(TypedDict):
 
 # ── All available tools ──────────────────────────────────
 ALL_TOOLS = [
-    # Academic (Phase 1)
-    get_timetable, get_grades, get_semesters,
+    # Academic (Phase 1 + Phase 2)
+    *academic_tools,
     # Tasks & Reminders
     create_task, list_tasks, update_task, complete_task, delete_task,
     # Quick Notes

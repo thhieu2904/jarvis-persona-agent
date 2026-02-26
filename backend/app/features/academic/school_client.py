@@ -253,6 +253,70 @@ class SchoolAPIClient:
         response.raise_for_status()
         return self._extract_data(response)
 
+    # ── New Data APIs (Phase 2) ──────────────────────────
+
+    async def get_student_info(self) -> dict:
+        """Get student personal information.
+
+        POST /public/api/dkmh/w-locsinhvieninfo
+        Returns: name, DOB, class, department, major, email, phone, advisor, etc.
+        """
+        self._ensure_authenticated()
+        response = await self._client.post(
+            f"{self.base_url}/dkmh/w-locsinhvieninfo",
+            json={},
+        )
+        response.raise_for_status()
+        return self._extract_data(response)
+
+    async def get_tuition_summary(self) -> dict:
+        """Get tuition fee summary across all semesters.
+
+        POST /public/api/rms/w-locdstonghophocphisv
+        Returns: tuition per semester (amount, paid, remaining debt).
+        """
+        self._ensure_authenticated()
+        response = await self._client.post(
+            f"{self.base_url}/rms/w-locdstonghophocphisv",
+            json={},
+        )
+        response.raise_for_status()
+        return self._extract_data(response)
+
+    async def get_semester_result(self, semester_id: int) -> dict:
+        """Get grades for a specific semester.
+
+        POST /public/api/dkmh/w-inketquahoctap
+
+        Args:
+            semester_id: Semester code, e.g. 20251.
+        Returns: list of courses with credits and scores for that semester.
+        """
+        self._ensure_authenticated()
+        response = await self._client.post(
+            f"{self.base_url}/dkmh/w-inketquahoctap",
+            json={"hoc_ky": semester_id},
+        )
+        response.raise_for_status()
+        return self._extract_data(response)
+
+    async def get_semester_timetable_overview(self, semester_id: int) -> dict:
+        """Get semester-wide timetable overview (all classes, grouped by subject).
+
+        POST /public/api/sch/w-locdstkbhockytheodoituong
+
+        Args:
+            semester_id: Semester code, e.g. 20251.
+        Returns: flat list of all class sessions in the semester.
+        """
+        self._ensure_authenticated()
+        response = await self._client.post(
+            f"{self.base_url}/sch/w-locdstkbhockytheodoituong",
+            json={"hoc_ky": semester_id},
+        )
+        response.raise_for_status()
+        return self._extract_data(response)
+
     # ── Public endpoints (no auth required) ─────────────
 
     @classmethod

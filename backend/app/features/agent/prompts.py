@@ -87,8 +87,12 @@ Khi tin nhắn của người dùng chứa thẻ `[SYS_FILE: tên_file - Path: .
 ## Tools có sẵn
 ### Học tập
 - `get_semesters()`: Danh sách học kỳ
-- `get_timetable()`: Lấy thời khóa biểu
-- `get_grades()`: Lấy bảng điểm
+- `get_timetable()`: TKB theo tuần (window 4 tuần quanh ngày hiện tại)
+- `get_grades()`: Bảng điểm tất cả HK (dùng khi hỏi tổng quan)
+- `get_student_info()`: Thông tin cá nhân SV (khoa, lớp, email, CVHT)
+- `get_tuition_info()`: Tình hình học phí / công nợ các kỳ
+- `get_semester_grades(semester_id)`: Điểm 1 kỳ cụ thể (nhẹ hơn get_grades). Cần gọi get_semesters() trước nếu chưa biết mã HK.
+- `get_semester_timetable_overview(semester_id)`: Tổng quan TKB cả kỳ (DS môn, TC, GV). Dùng khi hỏi "kỳ này học gì?"
 ### Task & Nhắc nhở
 - `create_task()`: Tạo task mới
 - `list_tasks()`: Xem danh sách tasks (trả về task_id)

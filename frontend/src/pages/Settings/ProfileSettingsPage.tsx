@@ -4,9 +4,12 @@ import {
   Settings as SettingsIcon,
   Eye,
   EyeOff,
+  Trash2,
+  Database,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { authService } from "../../services/auth.service";
+import api from "../../services/api";
 import styles from "./SettingsPage.module.css";
 
 function getInitials(name: string): string {
@@ -240,6 +243,160 @@ function SchoolForm() {
           </button>
         </div>
       </form>
+
+      {/* ── Cache Management ─────────────────────────────── */}
+      <CacheManagement />
+    </div>
+  );
+}
+
+function CacheManagement() {
+  const { user, updateAgentConfig } = useAuthStore();
+  const [updating, setUpdating] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [clearMsg, setClearMsg] = useState("");
+
+  const currentTTL = String(
+    (user?.agent_config as Record<string, unknown>)?.cache_ttl_hours ?? 24,
+  );
+
+  const handleTTLChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newVal = parseInt(e.target.value);
+    setUpdating(true);
+    try {
+      await updateAgentConfig({
+        ...((user?.agent_config as Record<string, unknown>) || {}),
+        cache_ttl_hours: newVal,
+      });
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleClearCache = async () => {
+    if (!confirm("Bạn chắc chắn muốn xóa toàn bộ dữ liệu tạm?")) return;
+    setClearing(true);
+    setClearMsg("");
+    try {
+      const res = await api.delete<{ message: string; deleted_count: number }>(
+        "/academic/cache",
+      );
+      setClearMsg(`✅ ${res.data.message}`);
+    } catch {
+      setClearMsg("❌ Xóa thất bại, vui lòng thử lại.");
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        marginTop: "var(--space-lg)",
+        paddingTop: "var(--space-md)",
+        borderTop: "1px solid var(--border-color)",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: "var(--space-sm)",
+        }}
+      >
+        <Database size={15} style={{ color: "var(--text-muted)" }} />
+        <span
+          style={{
+            fontSize: "var(--text-sm)",
+            fontWeight: 600,
+            color: "var(--text-primary)",
+          }}
+        >
+          Quản lý dữ liệu tạm (Cache)
+        </span>
+      </div>
+
+      <p
+        style={{
+          color: "var(--text-muted)",
+          fontSize: "var(--text-xs)",
+          marginBottom: "var(--space-md)",
+        }}
+      >
+        Dữ liệu học tập (TKB, điểm, thông tin SV, học phí) được lưu tạm để Agent
+        phản hồi nhanh hơn. Bạn có thể chỉnh thời gian lưu hoặc xóa sạch bất cứ
+        lúc nào.
+      </p>
+
+      <div className={styles.toggleRow}>
+        <div>
+          <div className={styles.toggleLabel}>Thời gian lưu tạm</div>
+          <div className={styles.toggleDesc}>
+            Sau khoảng thời gian này, Agent sẽ lấy dữ liệu mới từ trường.
+          </div>
+        </div>
+        <select
+          className={styles.selectSimple}
+          style={{
+            opacity: updating ? 0.5 : 1,
+            cursor: updating ? "wait" : "pointer",
+          }}
+          value={currentTTL}
+          onChange={handleTTLChange}
+          disabled={updating}
+        >
+          <option value="1">1 giờ</option>
+          <option value="6">6 giờ</option>
+          <option value="24">24 giờ (Mặc định)</option>
+          <option value="0">Không lưu tạm</option>
+        </select>
+      </div>
+
+      <div style={{ marginTop: "var(--space-md)" }}>
+        {clearMsg && (
+          <div
+            style={{
+              fontSize: "var(--text-xs)",
+              marginBottom: 8,
+              color: clearMsg.startsWith("✅")
+                ? "var(--green-600, #16a34a)"
+                : "var(--red-500, #ef4444)",
+            }}
+          >
+            {clearMsg}
+          </div>
+        )}
+        <button
+          onClick={handleClearCache}
+          disabled={clearing}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "8px 16px",
+            fontSize: "var(--text-sm)",
+            color: "var(--red-600, #dc2626)",
+            backgroundColor: "transparent",
+            border: "1px solid var(--red-300, #fca5a5)",
+            borderRadius: 8,
+            cursor: clearing ? "wait" : "pointer",
+            opacity: clearing ? 0.5 : 1,
+            transition: "all 0.2s",
+          }}
+          onMouseEnter={(e) => {
+            if (!clearing) {
+              e.currentTarget.style.backgroundColor = "var(--red-50, #fef2f2)";
+            }
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = "transparent";
+          }}
+        >
+          <Trash2 size={14} />
+          {clearing ? "Đang xóa..." : "Xóa toàn bộ dữ liệu tạm"}
+        </button>
+      </div>
     </div>
   );
 }

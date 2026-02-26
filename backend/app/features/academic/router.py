@@ -127,3 +127,20 @@ async def trigger_sync(
         "synced": synced,
         "errors": errors if errors else None,
     }
+
+
+@router.delete("/cache")
+async def clear_cache(
+    user_id: str = Depends(get_current_user_id),
+    db: Client = Depends(get_db),
+):
+    """Xóa toàn bộ dữ liệu tạm (cache) của user hiện tại.
+    
+    Dùng khi user muốn chủ động xóa sạch dữ liệu học tập đã lưu tạm.
+    """
+    result = db.table("academic_sync_cache").delete().eq("user_id", user_id).execute()
+    count = len(result.data) if result.data else 0
+    return {
+        "message": f"Đã xóa {count} bản ghi cache.",
+        "deleted_count": count,
+    }
