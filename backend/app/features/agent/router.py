@@ -157,6 +157,7 @@ async def chat(
         "user_location": data.user_location,
         "default_location": default_loc,
         "conversation_summary": session.get("summary", ""),
+        "platform": "web",
     }
 
     async def generate_chat_stream():
@@ -484,3 +485,200 @@ async def get_weather_data(
             return cached_entry["data"]
         raise HTTPException(status_code=500, detail=f"Lỗi khi lấy thông tin thời tiết: {str(e)}")
 
+
+# ══════════════════════════════════════════════════════════
+# ── Zalo Webhook (Inbound) ────────────────────────────────
+# ══════════════════════════════════════════════════════════
+
+import logging
+from time import time as time_now
+from fastapi import BackgroundTasks, Request
+import httpx
+
+_webhook_logger = logging.getLogger(__name__)
+
+# Dedup set: {message_id: timestamp} — tránh xử lý lại khi Zalo retry
+_processed_message_ids: dict[str, float] = {}
+_DEDUP_TTL_SECONDS = 300  # 5 phút
+
+
+def _cleanup_dedup():
+    """Xóa message_id cũ hơn TTL."""
+    cutoff = time_now() - _DEDUP_TTL_SECONDS
+    expired = [k for k, v in _processed_message_ids.items() if v < cutoff]
+    for k in expired:
+        del _processed_message_ids[k]
+
+
+async def _process_zalo_message(user_text: str, chat_id: str,
+                                 db_url: str, db_key: str):
+    """Background task: gọi LangGraph + gửi reply qua Zalo."""
+    from supabase import create_client
+    from langchain_core.messages import HumanMessage
+    from app.features.agent.graph import get_agent_graph
+    from app.features.agent.memory import MemoryManager
+    from app.background.scheduler import _get_owner_user_id
+    from app.core.zalo import send_zalo_message, send_zalo_photo, send_zalo_sticker
+    from app.core.zalo_formatter import ZaloFormatter, get_sticker_id
+
+    try:
+        db = create_client(db_url, db_key)
+        user_id = _get_owner_user_id()
+        if not user_id:
+            await send_zalo_message("❌ JARVIS: Không tìm thấy tài khoản.", chat_id)
+            return
+
+        memory = MemoryManager(db, user_id)
+        channel_key = f"zalo_{chat_id}"
+        session = memory.get_or_create_session(channel_key=channel_key)
+        session_id = session["id"]
+
+        history = memory.load_session_messages(session_id)
+        is_first_message = len(history) == 0  # Session mới → gửi sticker chào
+        trimmed_history = memory.apply_sliding_window(history)
+        trimmed_history.append(HumanMessage(content=user_text))
+        memory.save_message(session_id, "user", user_text)
+
+        default_loc, _ = memory.get_weather_prefs()
+
+        state = {
+            "messages": trimmed_history,
+            "user_id": user_id,
+            "user_name": memory.get_user_name(),
+            "user_preferences": memory.get_user_preferences(),
+            "user_location": None,
+            "default_location": default_loc,
+            "conversation_summary": session.get("summary", ""),
+            "platform": "zalo",
+        }
+
+        settings = get_settings()
+        graph = get_agent_graph()
+        result = await graph.ainvoke(
+            state,
+            config={"recursion_limit": settings.AGENT_RECURSION_LIMIT},
+        )
+
+        # Extract response text
+        ai_message = result["messages"][-1]
+        response_content = ai_message.content
+        if isinstance(response_content, list):
+            response_text = "\n".join(
+                part["text"] for part in response_content
+                if isinstance(part, dict) and part.get("type") == "text"
+            )
+        else:
+            response_text = str(response_content)
+
+        # Save AI response to DB (hiện trên Web UI)
+        memory.save_message(session_id, "assistant", response_text)
+
+        # Format for Zalo: tách ảnh + strip markdown
+        image_urls, clean_text = ZaloFormatter.extract_images_and_clean(response_text)
+
+        # Gửi ảnh tuần tự TRƯỚC text (fix race condition)
+        for img_url in image_urls:
+            await send_zalo_photo(img_url, chat_id=chat_id)
+            await asyncio.sleep(0.5)
+
+        # Gửi sticker chào khi bắt đầu session mới (chỉ lần đầu)
+        if is_first_message:
+            greeting_sticker = get_sticker_id("VAY_TAY")
+            if greeting_sticker:
+                await send_zalo_sticker(greeting_sticker, chat_id=chat_id)
+                await asyncio.sleep(0.3)
+
+        # Gửi text trực tiếp (skip sticker LLM chain để giảm latency ~2s)
+        if clean_text:
+            await send_zalo_message(clean_text, chat_id=chat_id)
+
+    except Exception as e:
+        _webhook_logger.error(f"Zalo webhook background error: {e}", exc_info=True)
+        from app.core.zalo import send_zalo_message
+        await send_zalo_message(f"⚠️ JARVIS gặp lỗi: {str(e)[:200]}", chat_id)
+
+
+@router.post("/webhook/zalo")
+async def zalo_webhook(request: Request, background_tasks: BackgroundTasks):
+    """Zalo Bot Inbound Webhook.
+
+    Trả 200 OK ngay lập tức để tránh Zalo timeout/retry.
+    Xử lý LangGraph ở background task.
+    """
+    settings = get_settings()
+
+    # 1. Validate Zalo secret token
+    secret = request.headers.get("X-Bot-Api-Secret-Token", "")
+    if not settings.ZALO_WEBHOOK_SECRET or secret != settings.ZALO_WEBHOOK_SECRET:
+        _webhook_logger.warning("Zalo webhook: invalid secret token")
+        return {"ok": True}
+
+    try:
+        data = await request.json()
+    except Exception:
+        return {"ok": True}
+
+    # Zalo webhook payload: event_name + message at top level
+    # (API docs show "result" wrapper but actual payload is flat)
+    result = data.get("result", data)  # fallback to data itself if no "result" key
+    event_name = result.get("event_name", "")
+
+    # 2. Chỉ xử lý text message (bỏ qua sticker, ảnh, v.v.)
+    if event_name != "message.text.received":
+        return {"ok": True}
+
+    message_obj = result.get("message", {})
+    chat_id = message_obj.get("chat", {}).get("id", "")
+    message_id = message_obj.get("message_id", "")
+    user_text = message_obj.get("text", "").strip()
+
+    if not chat_id or not user_text:
+        return {"ok": True}
+
+    # 3. Chỉ phản hồi owner (bảo mật cục bộ)
+    if chat_id != settings.ZALO_CHAT_ID:
+        _webhook_logger.info(f"Zalo webhook: rejected non-owner chat_id={chat_id[:8]}...")
+        return {"ok": True}
+
+    # 4. Dedup: chống xử lý lại khi Zalo retry
+    _cleanup_dedup()
+    if message_id and message_id in _processed_message_ids:
+        _webhook_logger.info(f"Zalo webhook: skipping duplicate message_id={message_id[:12]}")
+        return {"ok": True}
+    if message_id:
+        _processed_message_ids[message_id] = time_now()
+
+    # 5. Trả 200 OK ngay → xử lý ở background (tránh Zalo timeout 3-5s)
+    background_tasks.add_task(
+        _process_zalo_message,
+        user_text=user_text,
+        chat_id=chat_id,
+        db_url=settings.SUPABASE_URL,
+        db_key=settings.SUPABASE_SERVICE_KEY or settings.SUPABASE_KEY,
+    )
+
+    return {"ok": True}
+
+
+class ZaloWebhookSetupRequest(BaseModel):
+    webhook_url: str  # VD: https://xxxx.ngrok-free.app/api/agent/webhook/zalo
+
+
+@router.post("/webhook/zalo/setup")
+async def setup_zalo_webhook(data: ZaloWebhookSetupRequest):
+    """Đăng ký/cập nhật Webhook URL với Zalo Bot API (gọi 1 lần sau khi ngrok up)."""
+    settings = get_settings()
+    token = settings.ZALO_BOT_TOKEN
+    secret = settings.ZALO_WEBHOOK_SECRET
+
+    if not token:
+        raise HTTPException(status_code=500, detail="ZALO_BOT_TOKEN chưa được cấu hình")
+    if not secret:
+        raise HTTPException(status_code=500, detail="ZALO_WEBHOOK_SECRET chưa được cấu hình")
+
+    url = f"https://bot-api.zaloplatforms.com/bot{token}/setWebhook"
+    payload = {"url": data.webhook_url, "secret_token": secret}
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(url, json=payload)
+        return resp.json()

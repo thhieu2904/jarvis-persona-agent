@@ -180,12 +180,47 @@ class MemoryManager:
 
     # ── Conversation Session Management ──────────────────
 
-    def get_or_create_session(self, session_id: str | None = None) -> dict:
+    def get_or_create_session(self, session_id: str | None = None,
+                              channel_key: str | None = None) -> dict:
         """Get existing session or create a new one.
+        
+        Args:
+            session_id: UUID of existing session (for web).
+            channel_key: Stable key for external channels (e.g. "zalo_xxx").
+                         Uses channel_key column instead of id for lookup.
         
         Returns:
             Session record dict with id, summary, message_count.
         """
+        # Channel-based lookup (Zalo, future platforms)
+        if channel_key:
+            try:
+                result = (
+                    self.db.table("conversation_sessions")
+                    .select("*")
+                    .eq("user_id", self.user_id)
+                    .eq("channel_key", channel_key)
+                    .single()
+                    .execute()
+                )
+                if result.data:
+                    return result.data
+            except Exception:
+                pass  # Not found → create below
+
+            result = (
+                self.db.table("conversation_sessions")
+                .insert({
+                    "user_id": self.user_id,
+                    "is_active": True,
+                    "channel_key": channel_key,
+                    "title": "💬 Zalo Chat",
+                })
+                .execute()
+            )
+            return result.data[0]
+
+        # UUID-based lookup (web)
         if session_id:
             result = (
                 self.db.table("conversation_sessions")

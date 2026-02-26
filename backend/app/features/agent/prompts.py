@@ -12,7 +12,8 @@ def build_system_prompt(
     user_name: str = "bạn", 
     user_preferences: str = "",
     user_location: str | None = None,
-    default_location: str | None = None
+    default_location: str | None = None,
+    platform: str = "web",
 ) -> str:
     """Build system prompt with current datetime injected."""
     now = datetime.now(VN_TZ)
@@ -32,12 +33,24 @@ def build_system_prompt(
     elif default_location:
         location_context = f"\n- Nơi ở mặc định của người dùng là: {default_location}. Nếu người dùng hỏi thời tiết mà không chỉ định nơi chốn, hãy mặc định sử dụng vị trí này."
 
+    platform_hint = ""
+    if platform == "zalo":
+        platform_hint = (
+            "\n\n## Nền tảng: Zalo\n"
+            "- Người dùng đang nhắn tin qua app Zalo trên điện thoại.\n"
+            "- KHÔNG dùng Markdown (không ** không ### không ``` không bảng ---|---). "
+            "Zalo hiển thị tất cả ký tự đó thô, rất xấu.\n"
+            "- Thay vào đó: dùng gạch đầu dòng •, xuống dòng rõ ràng, emoji để tạo cấu trúc.\n"
+            "- Câu trả lời ngắn gọn hơn Web (tối đa 1500 ký tự nếu có thể).\n"
+            "- Không gửi bảng dữ liệu dài — tóm tắt thành danh sách bullet."
+        )
+
     return SYSTEM_PROMPT_TEMPLATE.format(
         user_name=user_name,
         user_preferences=user_preferences or "sinh viên Đại học Trà Vinh",
         current_time=current_time,
         location_context=location_context,
-    )
+    ) + platform_hint
 
 
 SYSTEM_PROMPT_TEMPLATE = """Bạn là **JARVIS**, trợ lý AI cá nhân của {user_name}.

@@ -53,9 +53,10 @@ class Settings(BaseSettings):
     # ── OpenWeather (Weather API) ────────────────────────
     OPENWEATHER_API_KEY: str = ""
 
-    # ── Zalo Bot (Push Notifications) ────────────────────
+    # ── Zalo Bot (Push Notifications + Webhook) ─────────
     ZALO_BOT_TOKEN: str = ""  # Token from Zalo Bot Creator
     ZALO_CHAT_ID: str = ""    # Your personal Zalo chat ID
+    ZALO_WEBHOOK_SECRET: str = ""  # Secret token for webhook verification
 
     # ── Agent ────────────────────────────────────────────
     AGENT_RECURSION_LIMIT: int = 25  # Max graph steps (agent+tool nodes per turn)

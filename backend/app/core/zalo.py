@@ -96,6 +96,42 @@ async def send_zalo_sticker(sticker_id: str, chat_id: str | None = None) -> bool
         return False
 
 
+async def send_zalo_photo(photo_url: str, caption: str = "",
+                          chat_id: str | None = None) -> bool:
+    """Send an image via Zalo Bot sendPhoto API.
+
+    Args:
+        photo_url: Public URL of the image (must be accessible from Zalo servers).
+        caption: Optional caption (text shown below image, max ~1000 chars).
+        chat_id: Recipient chat ID. Defaults to ZALO_CHAT_ID.
+    """
+    settings = get_settings()
+    token = settings.ZALO_BOT_TOKEN
+    recipient = chat_id or settings.ZALO_CHAT_ID
+
+    if not token or not recipient:
+        return False
+
+    url = f"{ZALO_API_BASE}/bot{token}/sendPhoto"
+    payload: dict = {"chat_id": recipient, "photo": photo_url}
+    if caption:
+        payload["caption"] = caption[:1000]
+
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.post(url, json=payload)
+            data = response.json()
+            if data.get("ok"):
+                logger.info(f"✅ Zalo photo sent: {photo_url[:60]}")
+                return True
+            else:
+                logger.error(f"❌ Zalo sendPhoto error: {data}")
+                return False
+    except Exception as e:
+        logger.error(f"❌ Failed to send Zalo photo: {e}")
+        return False
+
+
 async def send_agent_response_to_zalo(text: str, chat_id: str | None = None) -> bool:
     """
     Thin LLM chain: Đọc đoạn hội thoại, quyết định Cảm xúc (Emotion), gửi Sticker (nếu có) trước khi gửi Text.

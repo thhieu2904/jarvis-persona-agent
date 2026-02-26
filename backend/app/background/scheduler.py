@@ -130,8 +130,10 @@ async def _execute_routine(routine_type: str):
             "user_id": user_id,
             "user_name": memory.get_user_name(),
             "user_preferences": memory.get_user_preferences(),
+            "user_location": None,
             "default_location": default_location,
             "conversation_summary": "",
+            "platform": "zalo",  # Báo cáo gửi qua Zalo → LLM viết plain text
         }
 
         # Run agent graph
@@ -163,9 +165,16 @@ async def _execute_routine(routine_type: str):
             {"title": title_prefix}
         ).eq("id", session_id).execute()
 
-        # Send via Zalo Bot (Thin LLM Chain để lấy Sticker nếu có)
+        # Send via Zalo Bot (format markdown → plain text trước khi gửi)
+        from app.core.zalo_formatter import ZaloFormatter
+        from app.core.zalo import send_zalo_photo
+        import asyncio
         zalo_text = f"{title_prefix}\n\n{response_text}"
-        await send_agent_response_to_zalo(zalo_text)
+        image_urls, clean_zalo_text = ZaloFormatter.extract_images_and_clean(zalo_text)
+        for img_url in image_urls:
+            await send_zalo_photo(img_url)
+            await asyncio.sleep(0.5)
+        await send_agent_response_to_zalo(clean_zalo_text)
 
         logger.info(f"✅ {routine_type} routine completed successfully.")
 
@@ -279,8 +288,10 @@ async def run_dynamic_prompt_job(user_id: str, prompt: str, job_name: str):
             "user_id": user_id,
             "user_name": memory.get_user_name(),
             "user_preferences": memory.get_user_preferences(),
+            "user_location": None,
             "default_location": "Trà Vinh",
             "conversation_summary": "",
+            "platform": "web",
         }
         
         settings = get_settings()

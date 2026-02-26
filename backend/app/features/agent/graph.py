@@ -46,6 +46,7 @@ class AgentState(TypedDict):
     user_location: str | None
     default_location: str | None
     conversation_summary: str
+    platform: str  # "web" | "zalo"
 
 
 # ── All available tools ──────────────────────────────────
@@ -94,6 +95,7 @@ def build_agent_graph():
             user_preferences=state.get("user_preferences", "Chưa có thông tin"),
             user_location=state.get("user_location"),
             default_location=state.get("default_location"),
+            platform=state.get("platform", "web"),
         ))
 
         # Prepend summary if exists
