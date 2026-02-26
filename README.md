@@ -338,7 +338,15 @@ jarvis-persona-agent/
 - Sử dụng Gemini Pro Image model
 - Tự động upload lên Supabase Storage và trả về URL công khai
 - Hiển thị ảnh trực tiếp trong chat (Markdown image rendering)
-
+### 📚 Tài liệu & RAG (Phase 3)
+- Upload PDF/PPTX lên Supabase S3 (`knowledge-base` bucket private)
+- Background pipeline: TextSplitter (1000/200) → Gemini Embeddings (`text-embedding-004`, 768 dims) → pgvector
+- **Dual-mode ingestion**:
+  - *Luồng 1 (Temp)*: `/extract-text` giải nén văn bản vào RAM, gửi inline trong chat (không tốn vector DB)
+  - *Luồng 2 (Persistent)*: `/upload` xử lý nền, chunk + embed, lưu vào `material_chunks`
+  - *Luồng 3 (Promote)*: Agent tool `save_temp_document_to_knowledge_base` chuyển tài liệu từ `/temp/` lên domain thật
+- Agent tự động có 6 knowledge tools: search, save memory, semantic search, save, find, delete
+- `display_message`: lịch sử chat hiển thị clean (không dump raw document content)
 ### 🏠 Nhà thông minh (IoT)
 - Điều khiển ổ cắm thông minh Tuya/SmartLife qua mạng LAN cục bộ
 - Bật / Tắt / Kiểm tra trạng thái thiết bị
@@ -404,7 +412,7 @@ scheduled_prompts      -- name, cron_expr, prompt, is_active
 ```
 
 **Extensions PostgreSQL được sử dụng:**
-- `vector` — lưu trữ và tìm kiếm vector embedding (sẵn sàng cho RAG Phase 3)
+- `vector` — lưu trữ và tìm kiếm vector embedding (pgvector — đã dùng cho RAG Phase 3)
 - `pgcrypto` — tạo UUID
 - `unaccent` — tìm kiếm không dấu tiếng Việt
 
@@ -621,6 +629,15 @@ AGENT_SUMMARY_THRESHOLD=10 # Ngưỡng trigger tóm tắt
 | `PUT` | `/events/{id}` | Cập nhật sự kiện |
 | `DELETE` | `/events/{id}` | Xóa sự kiện |
 
+### Knowledge (`/api/knowledge`)
+| Method | Endpoint | Mô tả |
+|---|---|---|
+| `POST` | `/upload` | Upload file lên RAG (background processing + embeddings) |
+| `POST` | `/extract-text` | Extract text tạm thời vào RAM — không lưu DB |
+| `POST` | `/promote` | Promote tài liệu tạm từ temp/ lên persistent RAG |
+| `GET` | `/` | Danh sách tài liệu đã upload |
+| `DELETE` | `/{material_id}` | Xóa tài liệu khỏi S3 + DB (cascade chunks) |
+
 ### IoT (`/api`)
 | Method | Endpoint | Mô tả |
 |---|---|---|
@@ -643,7 +660,7 @@ AGENT_SUMMARY_THRESHOLD=10 # Ngưỡng trigger tóm tắt
 
 ## 🔧 Agent Tools
 
-JARVIS có **19 tools** tích hợp sẵn, được phân nhóm như sau:
+JARVIS có **25 tools** tích hợp sẵn, được phân nhóm như sau:
 
 ### 📚 Học tập (Academic)
 | Tool | Mô tả |
@@ -697,6 +714,16 @@ JARVIS có **19 tools** tích hợp sẵn, được phân nhóm như sau:
 |---|---|
 | `schedule_automation(task_name, cron_expr, prompt)` | Đặt lịch AI tự động theo Cron |
 
+### 📖 Tài liệu & Kiến thức (RAG — Phase 3)
+| Tool | Mô tả |
+|---|---|
+| `search_memories(query)` | Tìm kiếm bộ nhớ dài hạn đã lưu |
+| `save_memory(content)` | Lưu thông tin quan trọng vào bộ nhớ dài hạn |
+| `search_study_materials(query)` | Semantic search tài liệu học qua pgvector |
+| `save_temp_document_to_knowledge_base(storage_path, ...)` | Promote tài liệu tạm vào RAG persistent |
+| `find_study_materials(query)` | Tìm tài liệu theo tên file (ILIKE) |
+| `delete_study_material(material_id)` | Xóa tài liệu khỏi RAG (S3 + DB cascade) |
+
 ---
 
 ## 🖥️ Frontend
@@ -719,6 +746,7 @@ JARVIS có **19 tools** tích hợp sẵn, được phân nhóm như sau:
 - **Quá trình suy nghĩ (Thinking)**: Có thể xem reasoning của Gemini
 - **Tool results**: Xem dữ liệu trả về từ các tools (thu gọn được)
 - **Image Upload**: Đính kèm tối đa 5 ảnh / tin nhắn
+- **Document Attach**: Đính kèm PDF/PPTX vào chat — AI đọc nội dung inline (Dual-mode: temp context + promote to RAG)
 - **Voice Input**: Nhận diện giọng nói tiếng Việt (Web Speech API)
 - **Stop Generation**: Dừng stream giữa chừng
 - **FeaturePanel phải**: Widget thời tiết, lịch, task, ghi chú, routine
@@ -862,7 +890,7 @@ pytest tests/ -v
 | **Phase 1** | Auth, Academic (TVU), LangGraph Agent, Tasks | ✅ Hoàn thành |
 | **Phase 2** | Notes, Calendar, IoT Tuya, Zalo Bot, Scheduler | ✅ Hoàn thành |
 | **Phase 2.5** | Frontend React, Image Upload, Voice Input, Thinking Mode | ✅ Hoàn thành |
-| **Phase 3** | RAG Pipeline (pgvector + PDF/PPT upload + semantic search) | 📋 Kế hoạch |
+| **Phase 3** | RAG Pipeline — Dual-mode ingestion (temp context + persistent pgvector), Knowledge tools, File đính kèm trong chat | ✅ Hoàn thành |
 | **Phase 4** | Mobile App (React Native), offline support | 💡 Ý tưởng |
 | **Phase 5** | Multi-user mode, family/team sharing | 💡 Ý tưởng |
 
