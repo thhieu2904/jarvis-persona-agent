@@ -518,10 +518,13 @@ async def _process_zalo_message(user_text: str, chat_id: str,
     from app.features.agent.graph import get_agent_graph
     from app.features.agent.memory import MemoryManager
     from app.background.scheduler import _get_owner_user_id
-    from app.core.zalo import send_zalo_message, send_zalo_photo, send_zalo_sticker
-    from app.core.zalo_formatter import ZaloFormatter, get_sticker_id
+    from app.core.zalo import send_zalo_message, send_zalo_photo, send_zalo_chat_action
+    from app.core.zalo_formatter import ZaloFormatter
 
     try:
+        # Gửi typing indicator NGAY LẬP TỨC để user thấy bot đang xử lý
+        await send_zalo_chat_action("typing", chat_id=chat_id)
+
         db = create_client(db_url, db_key)
         user_id = _get_owner_user_id()
         if not user_id:
@@ -534,7 +537,6 @@ async def _process_zalo_message(user_text: str, chat_id: str,
         session_id = session["id"]
 
         history = memory.load_session_messages(session_id)
-        is_first_message = len(history) == 0  # Session mới → gửi sticker chào
         trimmed_history = memory.apply_sliding_window(history)
         trimmed_history.append(HumanMessage(content=user_text))
         memory.save_message(session_id, "user", user_text)
@@ -581,14 +583,7 @@ async def _process_zalo_message(user_text: str, chat_id: str,
             await send_zalo_photo(img_url, chat_id=chat_id)
             await asyncio.sleep(0.5)
 
-        # Gửi sticker chào khi bắt đầu session mới (chỉ lần đầu)
-        if is_first_message:
-            greeting_sticker = get_sticker_id("VAY_TAY")
-            if greeting_sticker:
-                await send_zalo_sticker(greeting_sticker, chat_id=chat_id)
-                await asyncio.sleep(0.3)
-
-        # Gửi text trực tiếp (skip sticker LLM chain để giảm latency ~2s)
+        # Gửi text trực tiếp (skip sticker LLM chain để giảm latency)
         if clean_text:
             await send_zalo_message(clean_text, chat_id=chat_id)
 

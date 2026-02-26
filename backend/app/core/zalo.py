@@ -96,6 +96,39 @@ async def send_zalo_sticker(sticker_id: str, chat_id: str | None = None) -> bool
         return False
 
 
+async def send_zalo_chat_action(action: str = "typing",
+                                 chat_id: str | None = None) -> bool:
+    """Show a chat action indicator (e.g. "typing...") in Zalo.
+
+    Args:
+        action: "typing" or "upload_photo".
+        chat_id: Recipient chat ID. Defaults to ZALO_CHAT_ID.
+    """
+    settings = get_settings()
+    token = settings.ZALO_BOT_TOKEN
+    recipient = chat_id or settings.ZALO_CHAT_ID
+
+    if not token or not recipient:
+        return False
+
+    url = f"{ZALO_API_BASE}/bot{token}/sendChatAction"
+    payload = {"chat_id": recipient, "action": action}
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.post(url, json=payload)
+            data = response.json()
+            if data.get("ok"):
+                logger.info(f"✅ Zalo chat action '{action}' sent")
+                return True
+            else:
+                logger.error(f"❌ Zalo sendChatAction error: {data}")
+                return False
+    except Exception as e:
+        logger.error(f"❌ Failed to send Zalo chat action: {e}")
+        return False
+
+
 async def send_zalo_photo(photo_url: str, caption: str = "",
                           chat_id: str | None = None) -> bool:
     """Send an image via Zalo Bot sendPhoto API.
