@@ -561,14 +561,21 @@ async def _process_zalo_message(user_text: str, chat_id: str,
             config={"recursion_limit": settings.AGENT_RECURSION_LIMIT},
         )
 
-        # Extract response text
+        # Extract response text + images (multimodal support)
         ai_message = result["messages"][-1]
         response_content = ai_message.content
         if isinstance(response_content, list):
-            response_text = "\n".join(
-                part["text"] for part in response_content
-                if isinstance(part, dict) and part.get("type") == "text"
-            )
+            text_parts = []
+            for part in response_content:
+                if isinstance(part, dict):
+                    if part.get("type") == "text":
+                        text_parts.append(part["text"])
+                    elif part.get("type") == "image_url":
+                        # Convert image part → markdown để ZaloFormatter xử lý
+                        img_url = part.get("image_url", {}).get("url", "")
+                        if img_url and not img_url.startswith("data:"):
+                            text_parts.append(f"![image]({img_url})")
+            response_text = "\n".join(text_parts)
         else:
             response_text = str(response_content)
 
@@ -630,10 +637,30 @@ async def zalo_webhook(request: Request, background_tasks: BackgroundTasks):
     if not chat_id or not user_text:
         return {"ok": True}
 
-    # 3. Chỉ phản hồi owner (bảo mật cục bộ)
-    if chat_id != settings.ZALO_CHAT_ID:
-        _webhook_logger.info(f"Zalo webhook: rejected non-owner chat_id={chat_id[:8]}...")
-        return {"ok": True}
+    # 3. Kiểm tra quyền truy cập
+    #    - Mặc định: chỉ owner (ZALO_CHAT_ID)
+    #    - Nếu bật "zalo_public_access" trong Settings: cho phép tất cả
+    is_owner = chat_id == settings.ZALO_CHAT_ID
+    if not is_owner:
+        # Check nếu chế độ public access đang bật
+        try:
+            from app.core.database import get_supabase_client
+            from app.background.scheduler import _get_owner_user_id
+            db = get_supabase_client()
+            owner_id = _get_owner_user_id()
+            if owner_id:
+                result_db = db.table("users").select("agent_config").eq("id", owner_id).single().execute()
+                agent_config = result_db.data.get("agent_config", {}) if result_db.data else {}
+                if not agent_config.get("zalo_public_access", False):
+                    _webhook_logger.info(f"Zalo webhook: rejected non-owner chat_id={chat_id[:8]}...")
+                    return {"ok": True}
+                # Public access ON → cho phép
+                _webhook_logger.info(f"Zalo webhook: public access ON, accepting chat_id={chat_id[:8]}...")
+            else:
+                return {"ok": True}
+        except Exception:
+            _webhook_logger.info(f"Zalo webhook: rejected non-owner (db check failed)")
+            return {"ok": True}
 
     # 4. Dedup: chống xử lý lại khi Zalo retry
     _cleanup_dedup()
