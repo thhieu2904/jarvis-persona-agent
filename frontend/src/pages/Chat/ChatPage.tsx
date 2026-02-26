@@ -13,6 +13,9 @@ import {
   Send,
   Wrench,
   ImagePlus,
+  Paperclip,
+  FileText,
+  Loader2,
   X,
   Lightbulb,
   Square,
@@ -20,6 +23,7 @@ import {
 } from "lucide-react";
 import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
+import { knowledgeService } from "../../services/knowledge.service";
 import Sidebar from "./components/Sidebar";
 import FeaturePanel from "./components/FeaturePanel";
 import styles from "./ChatPage.module.css";
@@ -41,6 +45,15 @@ const SUGGESTIONS = [
   "Phân tích hệ thống qua ảnh upload", // Vision
 ];
 
+interface AttachedDoc {
+  file: File;
+  text?: string;
+  storage_path?: string;
+  safe_file_name?: string; // secure_filename() result from backend
+  isLoading: boolean;
+  error?: string;
+}
+
 export default function ChatPage() {
   const { user } = useAuthStore();
   const {
@@ -56,12 +69,14 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [interimInput, setInterimInput] = useState("");
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
+  const [attachedDocs, setAttachedDocs] = useState<AttachedDoc[]>([]);
   const [isListening, setIsListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(true);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
   const silenceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debounceRef = useRef<boolean>(false);
@@ -180,13 +195,43 @@ export default function ChatPage() {
     const textToSend =
       input.trim() + (interimInput ? " " + interimInput.trim() : "");
     const msg = textToSend.trim();
-    if ((!msg && selectedImages.length === 0) || isSending) return;
+
+    const validDocs = attachedDocs.filter(
+      (d) => !d.isLoading && !d.error && d.text,
+    );
+
+    if (
+      (!msg && selectedImages.length === 0 && validDocs.length === 0) ||
+      isSending
+    )
+      return;
+
+    // Build context payload for RAG
+    let finalMessage = msg;
+    let displayMessage: string | undefined;
+    if (validDocs.length > 0) {
+      const docContext = validDocs
+        .map(
+          (d) =>
+            // Use safe_file_name (ASCII, no spaces) so the agent can locate the file on storage
+            `[SYS_FILE: ${d.safe_file_name || d.file.name}${d.storage_path ? ` - Path: ${d.storage_path}` : ""}]\n<document_content>\n${d.text}\n</document_content>`,
+        )
+        .join("\n\n");
+      finalMessage = `${docContext}\n\n${msg || "Hãy phân tích tài liệu này giúp mình nhé."}`;
+      // Clean display: show doc names + user text (no raw document dump)
+      const docNames = validDocs.map((d) => `📎 ${d.file.name}`).join("  ");
+      displayMessage = msg ? `${docNames}\n${msg}` : docNames;
+    }
+
     const imagesToSend =
       selectedImages.length > 0 ? [...selectedImages] : undefined;
+
     setInput("");
     setInterimInput("");
     setSelectedImages([]);
-    sendMessage(msg || "Phân tích ảnh này giúp mình", imagesToSend);
+    setAttachedDocs([]);
+
+    sendMessage(finalMessage || "Phân tích ảnh này giúp mình", imagesToSend, displayMessage);
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -200,6 +245,7 @@ export default function ChatPage() {
     setInput("");
     setInterimInput("");
     setSelectedImages([]);
+    setAttachedDocs([]);
     sendMessage(text);
   };
 
@@ -212,6 +258,53 @@ export default function ChatPage() {
 
   const removeImage = useCallback((index: number) => {
     setSelectedImages((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleDocSelect = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    // Process up to 3 docs at a time
+    const newDocs: AttachedDoc[] = files
+      .slice(0, 3)
+      .map((f) => ({ file: f, isLoading: true }));
+    setAttachedDocs((prev) => [...prev, ...newDocs].slice(0, 3));
+    e.target.value = ""; // Reset input
+
+    for (const doc of newDocs) {
+      try {
+        const res = await knowledgeService.extractText(doc.file);
+        setAttachedDocs((prev) =>
+          prev.map((d) =>
+            d.file.name === doc.file.name
+              ? {
+                  ...d,
+                  isLoading: false,
+                  text: res.text,
+                  storage_path: res.metadata?.storage_path,
+                  safe_file_name: res.metadata?.file_name,
+                }
+              : d,
+          ),
+        );
+      } catch (err: any) {
+        setAttachedDocs((prev) =>
+          prev.map((d) =>
+            d.file.name === doc.file.name
+              ? {
+                  ...d,
+                  isLoading: false,
+                  error: err.response?.data?.detail || "Lỗi đọc file",
+                }
+              : d,
+          ),
+        );
+      }
+    }
+  };
+
+  const removeDoc = useCallback((index: number) => {
+    setAttachedDocs((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
   const toggleListening = () => {
@@ -435,8 +528,92 @@ export default function ChatPage() {
                 ))}
               </div>
             )}
+            {/* Document preview strip */}
+            {attachedDocs.length > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  gap: "8px",
+                  padding: "8px 12px",
+                  overflowX: "auto",
+                  borderBottom: "1px solid var(--border-color, #e5e7eb)",
+                }}
+              >
+                {attachedDocs.map((doc, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      background: "var(--hover-bg, #f3f4f6)",
+                      padding: "6px 10px",
+                      borderRadius: "8px",
+                      fontSize: "13px",
+                      border: doc.error
+                        ? "1px solid #ef4444"
+                        : "1px solid transparent",
+                    }}
+                  >
+                    {doc.isLoading ? (
+                      <Loader2
+                        size={14}
+                        style={{ animation: "spin 1s linear infinite" }}
+                      />
+                    ) : (
+                      <FileText
+                        size={14}
+                        color={doc.error ? "#ef4444" : "#2563eb"}
+                      />
+                    )}
+                    <span
+                      style={{
+                        maxWidth: "140px",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        color: doc.error ? "#ef4444" : "var(--text-color)",
+                      }}
+                      title={doc.error || doc.file.name}
+                    >
+                      {doc.error || doc.file.name}
+                    </span>
+                    <button
+                      onClick={() => removeDoc(idx)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: 2,
+                        display: "flex",
+                        color: "var(--text-secondary)",
+                      }}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className={styles.inputRow}>
-              {/* Hidden file input */}
+              {/* Hidden file input for documents */}
+              <input
+                ref={docInputRef}
+                type="file"
+                accept=".txt,.md,.pdf,.docx"
+                multiple
+                onChange={handleDocSelect}
+                style={{ display: "none" }}
+              />
+              <button
+                className={styles.attachBtn}
+                onClick={() => docInputRef.current?.click()}
+                disabled={isSending}
+                title="Đính kèm tài liệu (PDF, DOCX, TXT, MD)"
+              >
+                <Paperclip size={20} />
+              </button>
+
               <input
                 ref={fileInputRef}
                 type="file"
@@ -493,7 +670,11 @@ export default function ChatPage() {
                 <button
                   className={styles.sendBtn}
                   onClick={handleSend}
-                  disabled={!input.trim() && selectedImages.length === 0}
+                  disabled={
+                    !input.trim() &&
+                    selectedImages.length === 0 &&
+                    attachedDocs.every((d) => d.isLoading || d.error)
+                  }
                   title="Gửi"
                 >
                   <Send size={20} />

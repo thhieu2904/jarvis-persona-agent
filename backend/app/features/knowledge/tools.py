@@ -120,8 +120,12 @@ def search_study_materials(
     domain: Literal['study', 'work', 'personal', 'other'] | None = None,
     user_id: Annotated[str, InjectedToolArg] = "",
 ) -> str:
-    """Tìm kiếm kiến thức trong kho tài liệu (PDF, Word) của chủ nhân.
-    Dùng khi người dùng hỏi về kiến thức chuyên môn, bài giảng, tài liệu công việc.
+    """Tìm kiếm kiến thức trong kho tài liệu (PDF, Word) đã được lưu trữ của chủ nhân.
+    Dùng khi người dùng hỏi về tài liệu trong kho MÀ KHÔNG đính kèm file trực tiếp.
+    
+    **QUAN TRỌNG**: KHÔNG gọi tool này nếu tin nhắn đã chứa thẻ [SYS_FILE: ...] và
+    block <document_content>...</document_content> — nội dung file đã có sẵn trong tin nhắn,
+    hãy đọc trực tiếp từ đó thay vì tìm trong kho.
     
     Args:
         query: Câu hỏi hoặc từ khóa muốn tìm kiếm trong tài liệu.
@@ -174,7 +178,7 @@ from app.core.database import get_supabase_client
 
 @tool
 def save_temp_document_to_knowledge_base(
-    file_name: str,
+    storage_path: str,
     domain: Literal['study', 'work', 'personal', 'other'],
     user_id: Annotated[str, InjectedToolArg] = "",
 ) -> str:
@@ -182,14 +186,18 @@ def save_temp_document_to_knowledge_base(
     Dùng khi file người dùng gửi có chứa thẻ metadata [SYS_FILE: ...] và người dùng yêu cầu "Lưu file này lại", "Đưa file tài liệu này vào kho cho tôi".
     
     Args:
-        file_name: Tên file chính xác được trích xuất từ thẻ [SYS_FILE] của file đang đính kèm.
+        storage_path: Đường dẫn lưu trữ được lấy từ phần "Path:" trong thẻ [SYS_FILE: ... - Path: storage_path].
+                      Ví dụ: "abc123/temp/CHUONG_2_PHP_can_ban.pdf".
+                      QUAN TRỌNG: Dùng đúng giá trị Path trong thẻ [SYS_FILE], không tự được cấu tạo lại.
         domain: Phân loại tài liệu vào 1 trong 4 thư mục: 'study', 'work', 'personal', 'other'. Tự suy luận từ yêu cầu của User.
         
     Returns:
         Kết quả di chuyển file và trạng thái chạy tiến trình học RAG.
     """
     db = get_supabase_client()
-    old_path = f"{user_id}/temp/{file_name}"
+    # Derive file_name from the end of the storage_path
+    file_name = storage_path.split("/")[-1]
+    old_path = storage_path
     new_path = f"{user_id}/{domain}/{file_name}"
     
     try:

@@ -14,7 +14,7 @@ interface ChatState {
 
   loadSessions: () => Promise<void>;
   setActiveSession: (sessionId: string) => Promise<void>;
-  sendMessage: (message: string, images?: File[]) => Promise<void>;
+  sendMessage: (message: string, images?: File[], displayMessage?: string) => Promise<void>;
   stopStreaming: () => void;
   startNewChat: () => void;
   deleteSession: (sessionId: string) => Promise<void>;
@@ -60,16 +60,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  sendMessage: async (message: string, images?: File[]) => {
+  sendMessage: async (message: string, images?: File[], displayMessage?: string) => {
     const { activeSessionId, messages } = get();
 
     // Optimistic: add user message immediately (with local preview)
+    // Use displayMessage (clean user text) if provided, else fall back to full message
+    const baseDisplay = displayMessage ?? message;
     const previewContent =
       images && images.length > 0
         ? images.map((f) => `![image](${URL.createObjectURL(f)})`).join("\n") +
           "\n\n" +
-          message
-        : message;
+          baseDisplay
+        : baseDisplay;
 
     const userMsg: ChatMessage = {
       id: `temp-${Date.now()}`,

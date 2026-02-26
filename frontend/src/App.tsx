@@ -9,6 +9,7 @@ import SettingsLayout from "./pages/Settings/SettingsLayout";
 import ProfileSettingsPage from "./pages/Settings/ProfileSettingsPage";
 import IoTManagementTab from "./pages/Settings/IoTManagementTab";
 import SchedulerSettingsPage from "./pages/Settings/SchedulerSettingsPage";
+import KnowledgeBasePage from "./pages/Settings/KnowledgeBasePage";
 
 export default function App() {
   const { loadFromStorage, token } = useAuthStore();
@@ -53,6 +54,7 @@ export default function App() {
           <Route path="profile" element={<ProfileSettingsPage />} />
           <Route path="iot" element={<IoTManagementTab />} />
           <Route path="scheduler" element={<SchedulerSettingsPage />} />
+          <Route path="knowledge-base" element={<KnowledgeBasePage />} />
         </Route>
 
         {/* Fallback */}

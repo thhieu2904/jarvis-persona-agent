@@ -1,6 +1,13 @@
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { User, Wifi, CalendarClock, LogOut, ChevronRight } from "lucide-react";
+import {
+  User,
+  Wifi,
+  CalendarClock,
+  LogOut,
+  ChevronRight,
+  BookOpen,
+} from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import styles from "./SettingsMenu.module.css";
 
@@ -26,6 +33,11 @@ const MENU_ITEMS: MenuItem[] = [
     icon: <User size={18} />,
     label: "Hồ sơ & Dữ liệu",
     path: "/settings/profile",
+  },
+  {
+    icon: <BookOpen size={18} />,
+    label: "Quản lý Kiến thức (RAG)",
+    path: "/settings/knowledge-base",
   },
   {
     icon: <Wifi size={18} />,
