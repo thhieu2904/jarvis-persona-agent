@@ -14,6 +14,7 @@ from apscheduler.triggers.cron import CronTrigger
 from app.config import get_settings
 from app.core.database import get_supabase_client
 from app.core.zalo import send_agent_response_to_zalo, send_zalo_message
+from app.background.temp_cleanup import cleanup_temp_files
 
 logger = logging.getLogger(__name__)
 
@@ -320,3 +321,6 @@ def sync_dynamic_jobs():
 
 # Chạy sync mỗi 5 phút một lần để update thay đổi ở DB
 scheduler.add_job(sync_dynamic_jobs, 'interval', minutes=5, id="sync_dynamic_jobs_task", replace_existing=True)
+
+# Dọn file tạm /temp/ trên S3 mỗi 6 giờ — xóa file > 24 giờ tuổi
+scheduler.add_job(cleanup_temp_files, 'interval', hours=6, id="cleanup_temp_files_task", replace_existing=True)

@@ -1,23 +1,28 @@
 import logging
 import json
-from langchain_core.tools import tool
+from typing import Annotated
+from langchain_core.tools import tool, InjectedToolArg
 
 from app.core.database import get_supabase_admin_client
 
 logger = logging.getLogger(__name__)
 
 @tool
-def schedule_automation(task_name: str, cron_expr: str, prompt_to_trigger: str, user_id: str = "") -> str:
+def schedule_automation(
+    task_name: str,
+    cron_expr: str,
+    prompt_to_trigger: str,
+    user_id: Annotated[str, InjectedToolArg] = "",
+) -> str:
     """
     Hẹn giờ hệ thống tự động thực hiện một công việc AI trong tương lai (Tưới cây, bật bếp, gửi báo cáo).
     Sử dụng chuẩn mã Cron Expression (minute hour day month day_of_week) của UTC+7.
     Ví dụ: '0 17 * * *' (5h chiều mỗi ngày), '30 6 * * 1-5' (6h30 sáng sáng T2-T6).
-    
+
     Args:
         task_name (str): Tên gợi nhớ của lịch hẹn (VD: "Bật nước nóng 6h tối").
         cron_expr (str): Chuỗi Cron biểu diễn chuẩn xác thời gian (VD: '0 18 * * *').
         prompt_to_trigger (str): Câu lệnh mớm cho AI chạy (VD: "Bật bình nóng lạnh lên").
-        user_id (str): Nội bộ tự có, bỏ qua.
     """
     if not user_id:
         return "Lỗi nội bộ Agent: Thiếu user_id để xác thực CSDL."

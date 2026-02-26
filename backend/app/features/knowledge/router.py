@@ -115,14 +115,18 @@ async def extract_text_only(
     (Luồng 1: Temporary Context) - Upload từ Chat
     Tải file lên, chỉ bóc tách chữ trả về ngay cho Frontend để nhét vào LUÔN context của LLM.
     KHÔNG lưu Vector, KHÔNG gọi Background Task Chunking.
-    File gốc vẫn được lưu tạm vào Storage `knowledge-base/{user_id}/temp/{filename}` để phòng hờ user muốn "Save to Knowledge Base" sau này.
+    File gốc được lưu tạm vào Storage `knowledge-base/{user_id}/temp/{unix_ts}_{filename}`.
+    Prefix unix_ts cho phép cleanup job tính tuổi file và tự xóa sau 24 giờ.
     """
     if not allowed_file(file.filename):
         raise HTTPException(status_code=400, detail="Only PDF, DOCX, TXT, and MD files are allowed.")
-        
+
+    import time as _time
     db = get_supabase_client()
     safe_filename = secure_filename(file.filename)
-    storage_path = f"{user_id}/temp/{safe_filename}"
+    # Prefix unix timestamp để cleanup job có thể tính tuổi file
+    unix_ts = int(_time.time())
+    storage_path = f"{user_id}/temp/{unix_ts}_{safe_filename}"
     
     try:
         file_bytes = await file.read()
@@ -239,16 +243,66 @@ async def promote_temp_to_knowledge_base(
 
 
 @router.get("/")
-async def get_study_materials(user_id: str = Depends(get_current_user_id)):
+async def get_study_materials(
+    user_id: str = Depends(get_current_user_id),
+    page: int = 1,
+    page_size: int = 10,
+    domain: str | None = None,
+    search: str | None = None,
+    status: str | None = None,
+):
     """
-    Lấy danh sách sách, tài liệu trong Knowledge Base của User.
-    Kèm theo presigned URL tải file (hết hạn sau 60 phút) vì bucket Private.
+    Lấy danh sách tài liệu trong Knowledge Base của User, hỗ trợ phân trang và lọc.
+
+    Query params:
+      - page: Trang hiện tại (1-based, mặc định 1)
+      - page_size: Số bản ghi mỗi trang (mặc định 10, tối đa 50)
+      - domain: Lọc theo domain (study | work | personal | other)
+      - search: Tìm kiếm theo tên file (ILIKE)
+      - status: Lọc theo processing_status (processing | success | failed)
+
+    Trả về presigned URL tải file (hết hạn sau 60 phút) vì bucket Private.
     """
+    # Validate & clamp params
+    page = max(1, page)
+    page_size = max(1, min(50, page_size))
+    offset = (page - 1) * page_size
+
+    # Validate domain if provided
+    valid_domains = {"study", "work", "personal", "other"}
+    if domain and domain not in valid_domains:
+        raise HTTPException(status_code=400, detail=f"Invalid domain. Must be one of: {', '.join(valid_domains)}")
+
+    valid_statuses = {"processing", "success", "failed", "pending"}
+    if status and status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
+
     db = get_supabase_client()
     try:
-        res = db.table("study_materials").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+        query = (
+            db.table("study_materials")
+            .select("*", count="exact")
+            .eq("user_id", user_id)
+        )
+
+        if domain:
+            query = query.eq("domain", domain)
+        if status:
+            query = query.eq("processing_status", status)
+        if search:
+            query = query.ilike("file_name", f"%{search}%")
+
+        res = (
+            query
+            .order("created_at", desc=True)
+            .range(offset, offset + page_size - 1)
+            .execute()
+        )
+
         materials = res.data
-        
+        total = res.count or 0
+        total_pages = max(1, -(-total // page_size))  # ceiling division
+
         # Sinh signed URL cho từng file (do stored path trong 'file_url' column)
         for m in materials:
             storage_path = m.get("file_url")
@@ -261,11 +315,19 @@ async def get_study_materials(user_id: str = Depends(get_current_user_id)):
                     m["download_url"] = None
             else:
                 m["download_url"] = storage_path
-                
+
         return {
             "status": "success",
-            "data": materials
+            "data": materials,
+            "pagination": {
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+            },
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching materials: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch materials: {str(e)}")
