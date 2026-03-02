@@ -37,6 +37,39 @@ function getInitials(name: string): string {
     .toUpperCase();
 }
 
+// Render tool result: convert ![...](url) → clickable link, rest in <pre>
+function ToolResultRenderer({
+  result,
+  className,
+}: {
+  result: string;
+  className: string;
+}) {
+  const imageRegex = /!\[.*?\]\((https?:\/\/[^)]+)\)/g;
+  const imgs: string[] = [];
+  let match;
+  while ((match = imageRegex.exec(result)) !== null) {
+    imgs.push(match[1]);
+  }
+  const textOnly = result.replace(/!\[.*?\]\(https?:\/\/[^)]+\)\n?/g, "").trim();
+  return (
+    <>
+      {imgs.map((url, i) => (
+        <a
+          key={i}
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ display: "block", fontSize: "11px", wordBreak: "break-all", marginBottom: "4px" }}
+        >
+          🖼 {url}
+        </a>
+      ))}
+      {textOnly && <pre className={className}>{textOnly}</pre>}
+    </>
+  );
+}
+
 const SUGGESTIONS = [
   "Tạo ảnh minh họa cho khái niệm OOP", // Image Gen tool
   "Tìm tin tức công nghệ mới nhất hôm nay", // Web Search tool
@@ -457,9 +490,10 @@ export default function ChatPage() {
                                     </span>
                                   )}
                                 </div>
-                                <pre className={styles.toolResultData}>
-                                  {tr.result}
-                                </pre>
+                                <ToolResultRenderer
+                                  result={tr.result}
+                                  className={styles.toolResultData}
+                                />
                               </div>
                             ))}
                           </div>

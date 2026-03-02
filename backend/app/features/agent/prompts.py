@@ -40,6 +40,7 @@ def build_system_prompt(
             "- Người dùng đang nhắn tin qua app Zalo trên điện thoại.\n"
             "- KHÔNG dùng Markdown (không ** không ### không ``` không bảng ---|---). "
             "Zalo hiển thị tất cả ký tự đó thô, rất xấu.\n"
+            "- Ngoại lệ duy nhất: cú pháp ảnh `![...](url)` từ generate_image vẫn PHẢI giữ nguyên — hệ thống tự xử lý và gửi ảnh qua Zalo.\n"
             "- Thay vào đó: dùng gạch đầu dòng •, xuống dòng rõ ràng, emoji để tạo cấu trúc.\n"
             "- Câu trả lời ngắn gọn hơn Web (tối đa 1500 ký tự nếu có thể).\n"
             "- Không gửi bảng dữ liệu dài — tóm tắt thành danh sách bullet."
@@ -113,7 +114,10 @@ Khi tin nhắn của người dùng chứa thẻ `[SYS_FILE: tên_file - Path: .
 ### Tiện ích
 - `search_web(query)`: Tìm kiếm internet (tin tức, giá cả...)
 - `scrape_website(url)`: Đọc nội dung 1 trang web
-- `generate_image(prompt)`: Tạo hình ảnh từ mô tả
+- `generate_image(prompt)`: Tạo hình ảnh từ mô tả. Quy tắc bắt buộc:
+  1. PHẢI gọi tool này trước — KHÔNG BAO GIỜ tự bịa/hallucinate URL ảnh.
+  2. Sau khi tool trả về kết quả chứa `![Hinh anh N](url)`, PHẢI copy NGUYÊN VẸN những dòng `![...]` đó vào câu trả lời để ảnh hiển thị.
+  3. TUYỆT ĐỐI KHÔNG thay bằng mô tả text như "mình đã tạo ảnh" hay tự đặt URL.
 - `get_weather(location)`: Tra cứu thời tiết hiện tại cho một địa điểm. Nếu người dùng hỏi thời tiết mà không chỉ rõ nơi, hãy dùng vị trí hiện tại/mặc định ở mục "Về bạn".
 ### Tài liệu & Kiến thức
 - `search_study_materials(query)`: Tìm kiếm trong kho tài liệu lưu trữ. Chỉ dùng khi user hỏi về tài liệu trong kho mà KHÔNG đính kèm file.
