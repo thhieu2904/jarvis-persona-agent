@@ -11,13 +11,16 @@ class IoTDevice(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     
     name = Column(String, nullable=False)
-    ip_address = Column(String, nullable=False)
-    mac_address = Column(String, nullable=True) # Lưu trữ để tự phục hồi IP
-    is_active = Column(Boolean, default=True) # Trạng thái online/offline
+    provider = Column(String, default="tuya")  # 'tuya' | 'ezviz'
+    ip_address = Column(String, nullable=True)  # Nullable: EZVIZ dùng Cloud, không cần IP
+    mac_address = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
     
-    device_id = Column(String, nullable=False)
-    local_key = Column(String, nullable=False)
+    # Tuya-specific (nullable cho EZVIZ)
+    device_id = Column(String, nullable=True)
+    local_key = Column(String, nullable=True)
     version = Column(Float, default=3.3)
     
-    device_type = Column(String, default="single") # 'single' hoặc 'multi'
-    dps_mapping = Column(JSON, nullable=True) # Ví dụ: {"1": "Quạt", "2": "Đèn"}
+    device_type = Column(String, default="single")  # 'single', 'multi', 'camera'
+    dps_mapping = Column(JSON, nullable=True)  # Tuya DPS: {"1": "Quạt", "2": "Đèn"}
+    config_data = Column(JSON, nullable=True)  # Đa năng: EZVIZ {"username":"..","password":"..","region":".."}

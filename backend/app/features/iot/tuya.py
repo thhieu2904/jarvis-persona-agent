@@ -23,7 +23,7 @@ def list_smart_home_devices(user_id: str = "") -> str:
         return "Lỗi nội bộ Agent: Thiếu user_id để xác thực CSDL."
         
     supabase = get_supabase_admin_client()
-    res = supabase.table("iot_devices").select("*").eq("user_id", user_id).execute()
+    res = supabase.table("iot_devices").select("*").eq("user_id", user_id).eq("provider", "tuya").execute()
     devices = res.data
     
     if not devices:

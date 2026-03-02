@@ -126,3 +126,42 @@ def test_iot_connection(
     except Exception as e:
         logger.error(f"Test connection error: {e}")
         return {"success": False, "message": f"Lỗi thực thi: {str(e)}"}
+
+@router.post("/test-ezviz")
+def test_ezviz_connection(
+    req: dict,
+    user_id: str = Depends(get_current_user_id)
+):
+    """Test kết nối tới EZVIZ Cloud API bằng tài khoản người dùng."""
+    try:
+        from pyezviz import EzvizClient
+
+        username = req.get("username", "")
+        password = req.get("password", "")
+        region = req.get("region", "apiisgp.ezvizlife.com")
+
+        if not username or not password:
+            return {"success": False, "message": "Thiếu tài khoản hoặc mật khẩu."}
+
+        client = EzvizClient(username, password, region)
+        client.login()
+        
+        cameras = client.load_cameras()
+        camera_list = []
+        for serial, cam in cameras.items():
+            camera_list.append({
+                "serial": serial,
+                "name": cam.get("name", "Unknown"),
+                "status": cam.get("status", -1),
+            })
+
+        client.close_session()
+
+        return {
+            "success": True,
+            "message": f"Kết nối thành công! Tìm thấy {len(camera_list)} camera.",
+            "cameras": camera_list,
+        }
+    except Exception as e:
+        logger.error(f"EZVIZ test connection error: {e}")
+        return {"success": False, "message": f"Lỗi kết nối EZVIZ: {str(e)}"}
