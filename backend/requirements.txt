@@ -1,7 +1,7 @@
 # ── Core Framework ───────────────────────────────────────
 fastapi==0.115.*
 uvicorn[standard]==0.34.*
-pydantic==2.10.*
+pydantic[email]==2.10.*
 pydantic-settings==2.7.*
 
 # ── Supabase ─────────────────────────────────────────────
@@ -14,7 +14,7 @@ passlib[bcrypt]==1.7.*
 bcrypt==4.*
 
 # ── LLM & Agent ─────────────────────────────────────────
-langchain-core==0.3.*
+langchain-core>=0.3.75,<0.4.0
 langgraph==0.3.*
 langchain-google-genai==2.*
 # Optional providers (install as needed):

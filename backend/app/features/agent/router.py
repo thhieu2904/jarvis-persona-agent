@@ -549,22 +549,38 @@ async def _process_zalo_message(user_text: str, chat_id: str,
         )
 
         # Extract response text + images (multimodal support)
-        ai_message = result["messages"][-1]
+        # Walk backwards to find the last AIMessage (skip ToolMessages if any)
+        from langchain_core.messages import AIMessage as _AIMessage
+        ai_message = next(
+            (m for m in reversed(result["messages"]) if isinstance(m, _AIMessage)),
+            result["messages"][-1],
+        )
         response_content = ai_message.content
         if isinstance(response_content, list):
             text_parts = []
             for part in response_content:
-                if isinstance(part, dict):
+                if isinstance(part, str):
+                    # Plain string element (Gemini thinking mode may return this)
+                    if part:
+                        text_parts.append(part)
+                elif isinstance(part, dict):
                     if part.get("type") == "text":
-                        text_parts.append(part["text"])
+                        text_parts.append(part.get("text", ""))
                     elif part.get("type") == "image_url":
                         # Convert image part → markdown để ZaloFormatter xử lý
                         img_url = part.get("image_url", {}).get("url", "")
                         if img_url and not img_url.startswith("data:"):
                             text_parts.append(f"![image]({img_url})")
-            response_text = "\n".join(text_parts)
+                    # Skip "thinking" parts — không gửi sang Zalo
+            response_text = "\n".join(p for p in text_parts if p)
         else:
             response_text = str(response_content)
+
+        _webhook_logger.info(
+            f"Zalo response extracted: {len(response_text)} chars "
+            f"(content type: {type(response_content).__name__}, "
+            f"parts: {len(response_content) if isinstance(response_content, list) else 'n/a'})"
+        )
 
         # Save AI response to DB (hiện trên Web UI)
         memory.save_message(session_id, "assistant", response_text)

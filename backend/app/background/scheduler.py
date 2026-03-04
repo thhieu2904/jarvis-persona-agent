@@ -148,13 +148,20 @@ async def _execute_routine(routine_type: str):
         )
 
         # Extract response text
-        ai_message = result["messages"][-1]
+        from langchain_core.messages import AIMessage as _AIMessage
+        ai_message = next(
+            (m for m in reversed(result["messages"]) if isinstance(m, _AIMessage)),
+            result["messages"][-1],
+        )
         response_content = ai_message.content
         if isinstance(response_content, list):
-            response_text = "\n".join(
-                part["text"] for part in response_content
-                if isinstance(part, dict) and part.get("type") == "text"
-            )
+            text_parts = []
+            for part in response_content:
+                if isinstance(part, str) and part:
+                    text_parts.append(part)
+                elif isinstance(part, dict) and part.get("type") == "text":
+                    text_parts.append(part.get("text", ""))
+            response_text = "\n".join(p for p in text_parts if p)
         else:
             response_text = str(response_content)
 
