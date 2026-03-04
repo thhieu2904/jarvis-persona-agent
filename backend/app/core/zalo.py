@@ -6,9 +6,11 @@ Docs: https://bot.zaloplatforms.com/docs/
 """
 
 import logging
+import asyncio
 import httpx
 
 from app.config import get_settings
+from app.core.zalo_formatter import split_text_for_zalo
 
 logger = logging.getLogger(__name__)
 
@@ -35,27 +37,36 @@ async def send_zalo_message(text: str, chat_id: str | None = None) -> bool:
         return False
 
     url = f"{ZALO_API_BASE}/bot{token}/sendMessage"
+    chunks = split_text_for_zalo(text)
 
-    # Zalo limits to 2000 chars per message
-    if len(text) > 2000:
-        text = text[:1997] + "..."
-
-    payload = {
-        "chat_id": recipient,
-        "text": text,
-    }
+    if not chunks:
+        logger.info("ℹ️ Skip sending empty Zalo message")
+        return True
 
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            response = await client.post(url, json=payload)
-            data = response.json()
+            total_chunks = len(chunks)
 
-            if data.get("ok"):
-                logger.info(f"✅ Zalo message sent (msg_id: {data['result'].get('message_id', 'N/A')})")
-                return True
-            else:
-                logger.error(f"❌ Zalo API error: {data}")
-                return False
+            for index, chunk in enumerate(chunks, start=1):
+                payload = {
+                    "chat_id": recipient,
+                    "text": chunk,
+                }
+
+                response = await client.post(url, json=payload)
+                data = response.json()
+
+                if data.get("ok"):
+                    message_id = data.get("result", {}).get("message_id", "N/A")
+                    logger.info(f"✅ Zalo message chunk {index}/{total_chunks} sent (msg_id: {message_id})")
+                else:
+                    logger.error(f"❌ Zalo API error on chunk {index}/{total_chunks}: {data}")
+                    return False
+
+                if index < total_chunks:
+                    await asyncio.sleep(0.5)
+
+            return True
     except Exception as e:
         logger.error(f"❌ Failed to send Zalo message: {e}")
         return False

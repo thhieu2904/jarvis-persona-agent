@@ -45,12 +45,23 @@ def search_web(query: str) -> str:
         if response.get("answer"):
             output += f"📌 Tóm tắt: {response['answer']}\n\n"
 
-        output += "📰 Nguồn chi tiết:\n"
-        for r in response.get("results", []):
+        results = response.get("results", [])
+        output += f"📰 Nguồn chi tiết ({len(results)} kết quả):\n"
+        for i, r in enumerate(results, 1):
             title = r.get("title", "")
             url = r.get("url", "")
             content = r.get("content", "")
-            output += f"- {title}\n  {content}\n  Link: {url}\n\n"
+            score = r.get("score", 0)
+            output += f"[{i}] {title} (độ liên quan: {score:.2f})\n"
+            output += f"    Nội dung: {content}\n"
+            output += f"    URL: {url}\n\n"
+
+        # Pre-format citation block so the LLM always includes it in its reply
+        output += "---\n📎 **Nguồn tham khảo** (BẮT BUỘC hiển thị cuối câu trả lời):\n"
+        for i, r in enumerate(results, 1):
+            title = r.get("title", "")
+            url = r.get("url", "")
+            output += f"{i}. [{title}]({url})\n"
 
         return output if output.strip() else "Không tìm thấy kết quả trên internet."
 

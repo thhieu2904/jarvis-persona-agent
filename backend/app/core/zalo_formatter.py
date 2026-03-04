@@ -26,10 +26,79 @@ STICKER_MAP = load_stickers()
 # Tạo Enum động (Dynamic Enum) từ các Key trong file JSON để cấp cho LLM
 EmotionType = Enum('EmotionType', {k: k for k in STICKER_MAP.keys()})
 
+ZALO_SAFE_TEXT_LIMIT = 1900
+
 def get_sticker_id(emotion: str) -> Optional[str]:
     """Lấy Sticker ID từ key cảm xúc (trả về None nếu không map được)."""
     emotion = emotion.strip().upper()
     return STICKER_MAP.get(emotion) if emotion != "NONE" else None
+
+
+def split_text_for_zalo(text: str, limit: int = ZALO_SAFE_TEXT_LIMIT) -> List[str]:
+    """Tách text thành nhiều phần an toàn cho Zalo sendMessage.
+
+    Ưu tiên cắt theo ranh giới tự nhiên: đoạn, dòng, câu, từ.
+    Fallback cuối cùng là cắt cứng theo limit.
+    """
+    if limit <= 0:
+        raise ValueError("limit must be greater than 0")
+
+    if not text:
+        return []
+
+    remaining = text.replace("\r\n", "\n").strip()
+    if not remaining:
+        return []
+
+    chunks: List[str] = []
+    sentence_separators = [". ", "! ", "? ", ".\n", "!\n", "?\n"]
+
+    while remaining:
+        if len(remaining) <= limit:
+            chunks.append(remaining)
+            break
+
+        window = remaining[:limit]
+        min_tail_position = max(limit // 2, 1)
+        cut = -1
+
+        paragraph_cut = window.rfind("\n\n")
+        if paragraph_cut >= min_tail_position:
+            cut = paragraph_cut + 2
+
+        if cut == -1:
+            line_cut = window.rfind("\n")
+            if line_cut >= min_tail_position:
+                cut = line_cut + 1
+
+        if cut == -1:
+            sentence_cut = -1
+            sentence_offset = 0
+            for separator in sentence_separators:
+                idx = window.rfind(separator)
+                if idx > sentence_cut and idx >= min_tail_position:
+                    sentence_cut = idx
+                    sentence_offset = len(separator)
+            if sentence_cut != -1:
+                cut = sentence_cut + sentence_offset
+
+        if cut == -1:
+            word_cut = window.rfind(" ")
+            if word_cut >= min_tail_position:
+                cut = word_cut + 1
+
+        if cut == -1:
+            cut = limit
+
+        chunk = remaining[:cut].strip()
+        if not chunk:
+            chunk = remaining[:limit]
+            cut = limit
+
+        chunks.append(chunk)
+        remaining = remaining[cut:].lstrip()
+
+    return chunks
 
 
 class ZaloFormatter:
